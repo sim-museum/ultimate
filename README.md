@@ -1,0 +1,57 @@
+# ultimate
+
+An ultimate frisbee game: seven against seven, self-refereed, in 3D. Built with Godot 4.
+
+This is the first playable version: a graybox. Capsule players on a regulation field, under a high
+broadcast camera, playing full points from the pull to a goal.
+
+## Running it
+
+Install Godot 4.7 (the standard build, not .NET) from godotengine.org, then from this folder:
+
+    godot --path .
+
+To watch the AI play both teams:
+
+    godot --path . -- --autoplay
+
+## Controls
+
+You play Blue.
+
+- **On offence:** click a spot on the field to throw there.
+  - `1` backhand, `2` forehand, `3` hammer.
+  - Hold `Shift` for inside-out, hold `Space` to huck.
+  - The marker counts to ten.
+- **On defence:** `WASD` or the arrow keys steer the highlighted player. `Tab` switches to the player
+  nearest the disc.
+- `F1` toggles autoplay. `Esc` quits.
+
+## What's in it
+
+- **Rules (after the WFDF Rules of Ultimate 2025-2028):**
+  - the pull, with the brick for an out-of-bounds pull;
+  - no running with the disc;
+  - the marker's stall count to ten;
+  - turnovers for a drop, a block, an interception, out of bounds or a stall;
+  - a goal for a catch in the attacked end zone, then the teams change ends and the scoring team pulls;
+  - first to 15.
+- **The field:** 100 m by 37 m, 18 m end zones, brick marks 18 m from the goal lines.
+- **Disc flight:** gravity, lift and drag from the angle of attack, using the coefficient set common to
+  open frisbee flight models (after Hummel, 2003). The bank angle bends the throw. The hammer flies
+  upside down.
+- **Throws:** a throw solver finds the release speed and direction that bring the disc to the chosen spot.
+- **The AI:**
+  - offence runs a vertical stack with cuts under and deep;
+  - the thrower picks the receiver who wins the race to the disc;
+  - defence is person to person, with a reaction lag;
+  - players chase the disc, and catch, block or lay out for it.
+
+## Layout
+
+- `scripts/sim/`: the game itself, with no rendering: field, disc flight, throw solver, players, match
+  rules and AI.
+- `scripts/view/`: the 3D view, input and HUD.
+- `scenes/main.tscn`: the main scene.
+
+The licence is still to be decided.
