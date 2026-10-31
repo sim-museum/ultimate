@@ -16,6 +16,8 @@ var speed := SPRINT            # this player's top speed
 var role := "stack"            # stack, cut, clear, dump, hold, mark, chase, receive, pull, line
 var timer := 0.0               # time left in the current role
 var mark: PlayerState          # a defender's assignment (person-to-person)
+var zone_role := ""            # in a zone defence: cup, middle, wing_l, wing_r or deep (the cup player nearest
+                               # the thrower marks)
 var steer := Vector3.ZERO      # a human player's stick direction (zero: the AI moves them)
 var sprint := false            # run through the goal at full speed (attacking the disc), no slowing down
 

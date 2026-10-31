@@ -23,6 +23,8 @@ const MARK_DIST := 1.6         # m: the marker stands this far from the thrower 
 const COUNT_RANGE := 3.0       # m: the marker counts only within this distance
 const DT := 1.0 / 120.0
 const WINDUP := {"backhand": 0.4, "forehand": 0.3, "hammer": 0.45, "pull": 0.6}   # s from decision to release
+const ZONE_ROLES := ["deep", "wing_l", "wing_r", "middle", "cup", "cup", "cup"]
+const CLAMP_AFTER := 2.0       # s into a hold: the zone's cup closes in on the thrower
 
 enum Phase { LINE_UP, PULL, PICKUP, HOLD, FLIGHT, GOAL, OVER }
 
@@ -52,6 +54,10 @@ var wind := Vector3.ZERO
 
 var tune := {"margin": 0.5, "react": REACT, "def_chance": DEF_CHANCE, "def_reach": DEF_REACH,
 		"hand_block": HAND_BLOCK, "break_penalty": 2.0, "late": -0.15, "swing": 4.0, "lean": 0.0, "goal_side": 2.5}   # the AI's knobs; ULT_TUNE (JSON) overrides them
+## Each team's defence: "person" (person to person) or "zone" (a cup of three round the thrower, a middle, two
+## wings and a deep; common in the women's game: the PO's semifinal recording is a zone throughout). Maroon plays
+## zone by default; ULT_DEFENCE="person,zone" (White, Maroon) overrides.
+var defence: Array[String] = ["person", "zone"]
 var pending: ThrowSolver.Release                # a throw being wound up (released when windup_left runs out)
 var pending_to: PlayerState
 var windup_left := 0.0
@@ -71,6 +77,11 @@ func _init(seed_value: int = 1, human_side: int = 0) -> void:
 		if extra is Dictionary:
 			for k in extra:
 				tune[k] = float(extra[k])
+	var env_d := OS.get_environment("ULT_DEFENCE")
+	if env_d != "":
+		var parts := env_d.split(",")
+		for t in mini(2, parts.size()):
+			defence[t] = parts[t].strip_edges()
 	var numbers := [[4, 7, 10, 12, 21, 23, 88], [2, 5, 9, 14, 17, 31, 44]]
 	for t in 2:
 		for i in PLAYERS:
@@ -109,10 +120,12 @@ func start_point(puller: int) -> void:
 			p.goal = p.pos
 			p.role = "line"
 			p.steer = Vector3.ZERO
-	# Person-to-person: defender i takes attacker i, both ways.
+	# Person-to-person: defender i takes attacker i, both ways. A zone's roles: a deep, two wings, a middle and the
+	# cup of three (fixed for the point, as in a real zone).
 	for t in 2:
 		for i in PLAYERS:
 			teams[t][i].mark = teams[1 - t][i]
+			teams[t][i].zone_role = ZONE_ROLES[i]
 	_pick_human()
 	disc = DiscFlight.State.new(teams[puller][3].pos + Vector3(0, 1, 0))
 	set_phase(Phase.LINE_UP)
@@ -271,7 +284,10 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	release = r
 	_release(who, r, to)
 	stats.throws += 1
-	if breaking and rng.randf() < float(tune.hand_block):
+	# A zone's mark stands among a cup and is beaten round the edge more often than a tight person-to-person mark:
+	# half the chance of a hand on a break (to tune against the gold-standard footage).
+	var hand := float(tune.hand_block) * (0.5 if defence[1 - offence] == "zone" else 1.0)
+	if breaking and rng.randf() < hand:
 		stats.blocks += 1
 		say("%s #%d gets a hand to the break throw" % [names[1 - offence], marker.number])
 		_turnover(Vector3(who.pos.x, 0, who.pos.z) + mark_side(), "hand block")
@@ -442,7 +458,7 @@ func _pickup_by(t: int, spot: Vector3) -> void:
 			q.role = "stack"
 			q.timer = rng.randf_range(1.0, 3.0)
 	for q: PlayerState in teams[1 - t]:
-		q.role = "guard"
+		q.role = "zone" if defence[1 - t] == "zone" else "guard"
 	set_phase(Phase.PICKUP)
 
 
@@ -465,13 +481,22 @@ func _take(p: PlayerState) -> void:
 		if q != p:
 			q.role = "stack"
 			q.timer = rng.randf_range(0.5, 2.5)
+	if defence[1 - offence] == "zone":
+		# The cup player nearest the thrower marks; the other two form the cup; the rest hold their zones.
+		var nearest: PlayerState = null
+		for q: PlayerState in teams[1 - offence]:
+			q.role = "zone"
+			if q.zone_role == "cup" and (nearest == null or q.pos.distance_to(p.pos) < nearest.pos.distance_to(p.pos)):
+				nearest = q
+		nearest.role = "mark"
+		return
 	for q: PlayerState in teams[1 - offence]:
 		q.role = "mark" if q.mark == p else "guard"
 
 
 func _marker() -> PlayerState:
 	for q: PlayerState in teams[1 - offence]:
-		if q.mark == holder:
+		if q.role == "mark" or (q.mark == holder and defence[1 - offence] == "person"):
 			return q
 	return null
 
@@ -630,6 +655,8 @@ func _ai_goal(p: PlayerState, dt: float) -> void:
 			p.goal = hp + Vector3(d * 0.6, 0, -1.4).normalized() * MARK_DIST
 		"guard", "chase":
 			_defend(p)
+		"zone":
+			_zone(p)
 		_:
 			if on_o:
 				_offence_goal(p, dt)
@@ -658,6 +685,57 @@ func _defend(p: PlayerState) -> void:
 	p.goal = seen + Vector3(d * float(tune.goal_side), 0, 0) + lean
 
 
+## Zone defence: each defender holds a spot set by where the disc is, not by an attacker. The cup (the mark and
+## two beside and a little ahead of the thrower, taking away the middle), a middle 9 m downfield, two wings 12 m
+## downfield shading to the disc's side, and a deep about 26 m downfield. After CLAMP_AFTER s of a hold the cup
+## closes in ("clamping"). In the air, a defender near where the disc comes down goes for it; the others reset
+## round where it will land, after the reaction time.
+func _zone(p: PlayerState) -> void:
+	var d: int = dir[offence]
+	var base := holder.pos if holder != null else Vector3(disc.pos.x, 0, disc.pos.z)
+	if phase == Phase.FLIGHT and release != null:
+		var land := Vector3(release.arrival.x, 0, release.arrival.z)
+		if p.pos.distance_to(land) < 7.0 and disc.time > tune.react * 0.5:
+			p.goal = _catch_spot(p, release)
+			p.sprint = true
+			return
+		if disc.time < tune.react:
+			return                                         # still reading the throw: keep going where you were
+		base = land
+	p.goal = zone_spot(p, base, d)
+
+
+## Where a zone defender stands with the disc at `base`, the offence attacking towards `d`.
+func zone_spot(p: PlayerState, base: Vector3, d: int) -> Vector3:
+	var clamp_k := 0.75 if holder != null and hold_time > CLAMP_AFTER else 1.0
+	var shade := clampf(base.z, -Field.HALF_W, Field.HALF_W)
+	var spot := base
+	match p.zone_role:
+		"cup":
+			# The two cup players who are not marking: either side of the thrower, a step downfield.
+			var cups: Array = []
+			for q: PlayerState in teams[p.team]:
+				if q.zone_role == "cup" and q.role != "mark":
+					cups.append(q)
+			var side := -1.0 if cups.find(p) == 0 else 1.0
+			spot = base + Vector3(d * 2.8 * clamp_k, 0, side * 3.2 * clamp_k)
+		"middle":
+			spot = base + Vector3(d * 9.0, 0, 0)
+			spot.z = shade * 0.5
+		"wing_l", "wing_r":
+			var side := -1.0 if p.zone_role == "wing_l" else 1.0
+			spot = base + Vector3(d * 12.0, 0, 0)
+			spot.z = side * 11.0 + shade * 0.35
+		"deep":
+			spot = base + Vector3(d * 26.0, 0, 0)
+			spot.z = shade * 0.3
+	# Inside the field, and no deeper than the back of the attacked end zone.
+	var back := Field.HALF_L - 1.5
+	spot.x = clampf(spot.x, -back, back)
+	spot.z = clampf(spot.z, -Field.HALF_W + 1.0, Field.HALF_W - 1.0)
+	return spot
+
+
 func _offence_goal(p: PlayerState, dt: float) -> void:
 	var d: int = dir[offence]
 	var base := holder.pos if holder != null else Vector3(disc.pos.x, 0, disc.pos.z)
@@ -667,6 +745,9 @@ func _offence_goal(p: PlayerState, dt: float) -> void:
 		# Get ready for the next throw: drift to the stack around the landing spot.
 		base = Vector3(release.arrival.x, 0, release.arrival.z)
 	p.timer -= dt
+	if defence[1 - offence] == "zone" and p.role in ["stack", "cut", "clear"]:
+		p.goal = _zone_offence_spot(p, base, d)
+		return
 	match p.role:
 		"stack":
 			p.goal = _stack_spot(p, base, d)
@@ -689,6 +770,39 @@ func _offence_goal(p: PlayerState, dt: float) -> void:
 				p.timer = rng.randf_range(2.0, 4.0)
 		"dump":
 			p.goal = base + Vector3(-d * 4.0, 0, 5.0)
+
+
+## Against a zone: spread the field and move the disc. Two handlers level with the thrower across the field
+## (with the thrower, a line to swing along); two poppers in the holes behind the cup, stepping towards the
+## thrower in turn; two deep, wide, to stretch the wings and the deep.
+func _zone_offence_spot(p: PlayerState, base: Vector3, d: int) -> Vector3:
+	var others: Array = []
+	for q: PlayerState in teams[offence]:
+		if q != holder:
+			others.append(q)
+	var k := others.find(p)
+	var spot := base
+	var pop := fmod(clock + 1.3 * k, 4.0) < 2.0           # each popper steps up for two seconds in four
+	match k:
+		0, 1:
+			# Handlers: 9 m either side of the thrower and a step back; near a sideline, both to the open side
+			# (9 and 17 m away).
+			var offs := [-9.0, 9.0]
+			if base.z + 9.0 > Field.HALF_W - 2.0:
+				offs = [-9.0, -17.0]
+			elif base.z - 9.0 < -Field.HALF_W + 2.0:
+				offs = [9.0, 17.0]
+			spot = Vector3(base.x - d * 1.5, 0, base.z + float(offs[k]))
+		2, 3:
+			var side := -1.0 if k == 2 else 1.0
+			spot = base + Vector3(d * (5.0 if pop else 8.5), 0, side * 4.5)
+		_:
+			var side := -1.0 if k == 4 else 1.0
+			spot = Vector3(base.x + d * 22.0, 0, side * 9.0)
+	var back := Field.HALF_L - 1.5
+	spot.x = clampf(spot.x, -back, back)
+	spot.z = clampf(spot.z, -Field.HALF_W + 1.5, Field.HALF_W - 1.5)
+	return spot
 
 
 func _stack_spot(p: PlayerState, base: Vector3, d: int) -> Vector3:
