@@ -8,10 +8,20 @@ extends Node3D
 ## clips placed at the speeds they were captured at; faster than the fastest clip, the clip plays faster.
 
 const PLAYERS_DIR := "res://assets/players/"
-const VARIANTS := ["a", "b", "c", "d"]
+## Women's ultimate: nine body variants (tools/athletes). as1-as5 have East Asian features; the white team is
+## mostly East Asian players (as many top women's teams are), the maroon team mixed.
+const VARIANTS := ["as1", "as2", "as3", "as4", "as5", "w1", "w2", "w4", "w5"]
+const ROSTERS := [["as1", "as4", "as2", "w2", "as3", "as5", "as1"],
+		["w4", "w5", "as3", "w1", "w2", "as2", "w5"]]
+## Hair colour over the hair texture (the MPFB hair textures are brown): near black for the East Asian variants.
+const HAIR_TINT := {"as1": Color(0.22, 0.2, 0.19), "as2": Color(0.3, 0.27, 0.25), "as3": Color(0.4, 0.37, 0.35),
+		"as4": Color(0.22, 0.2, 0.19), "as5": Color(0.4, 0.37, 0.35)}
+const HAIR_NODES := ["ponytail", "braid", "bob", "short0", "afro", "long0"]
 const TURN_RATE := 9.0          # rad/s: how fast the body turns to its heading
 const FACE_MOVE := 2.2          # m/s: above this the player faces where they run, below it the disc
-const THROW_LEAD := 0.15        # s: the throw clip starts this long before its release (the sim releases at once)
+const THROW_LEAD := 0.15        # s: a throw seen only at its release starts its clip this long before it
+const THROW_CLIPS := {"backhand": ["backhand", "backhand2"], "pull": ["backhand", "backhand2"],
+		"forehand": ["forehand"], "hammer": ["hammer"]}
 
 static var _clips := {}
 static var _scenes := {}
@@ -23,6 +33,8 @@ var tree: AnimationTree
 var yaw := 0.0
 var hand_bone := -1
 var number_back: Label3D
+var throwing := ""              # the throw clip last started
+var throw_clock := 0.0          # where that clip is now (s)
 var _run_speed := 1.0           # the fastest forward clip's own speed
 
 
@@ -33,7 +45,8 @@ static func clips() -> Dictionary:
 	return _clips
 
 
-func setup(variant: String, jersey: Color, shorts: Color, number: int) -> void:
+## kit: {"jersey", "shorts", "sleeves" (the undershirt), "number", "outline"} colours.
+func setup(variant: String, kit: Dictionary, number: int) -> void:
 	if not _scenes.has(variant):
 		_scenes[variant] = load(PLAYERS_DIR + "athlete_%s.glb" % variant)
 	model = (_scenes[variant] as PackedScene).instantiate()
@@ -41,18 +54,28 @@ func setup(variant: String, jersey: Color, shorts: Color, number: int) -> void:
 	skeleton = model.find_children("*", "Skeleton3D", true, false)[0]
 	anim = model.find_children("*", "AnimationPlayer", true, false)[0]
 	hand_bone = skeleton.find_bone("RightHand")
-	_tint(jersey, shorts)
+	_tint(kit, variant)
 	_build_tree(variant)
-	_add_numbers(number)
+	_add_numbers(number, kit)
 
 
-func _tint(jersey: Color, shorts: Color) -> void:
+func _tint(kit: Dictionary, variant: String) -> void:
 	for m: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+		var n := String(m.name)
+		if HAIR_TINT.has(variant) and HAIR_NODES.any(func(h): return n.contains(h)):
+			var hm := m.get_active_material(0)
+			if hm is BaseMaterial3D:
+				var dup := (hm as BaseMaterial3D).duplicate() as BaseMaterial3D
+				dup.albedo_color = HAIR_TINT[variant]
+				m.material_override = dup
+			continue
 		var c := Color.TRANSPARENT
-		if m.name.begins_with("Jersey"):
-			c = jersey
-		elif m.name.begins_with("Shorts"):
-			c = shorts
+		if n.begins_with("Jersey"):
+			c = kit["jersey"]
+		elif n.begins_with("Shorts"):
+			c = kit["shorts"]
+		elif n.begins_with("Sleeves"):
+			c = kit["sleeves"]
 		if c.a == 0.0:
 			continue
 		var mat := StandardMaterial3D.new()
@@ -91,7 +114,7 @@ func _build_tree(variant: String) -> void:
 	bt.add_node("scale", scale)
 	bt.connect_node("scale", 0, "loco")
 	var throw_anim := AnimationNodeAnimation.new()
-	throw_anim.animation = _anim_name(lib_names, "throw")
+	throw_anim.animation = _anim_name(lib_names, "backhand")
 	bt.add_node("throw_anim", throw_anim)
 	var seek := AnimationNodeTimeSeek.new()
 	bt.add_node("seek", seek)
@@ -118,7 +141,7 @@ func _anim_name(names: PackedStringArray, want: String) -> String:
 
 
 ## The number on the back (and smaller on the front), riding on the upper spine so it leans and twists with it.
-func _add_numbers(number: int) -> void:
+func _add_numbers(number: int, kit: Dictionary) -> void:
 	var spine := skeleton.find_bone("Spine1")
 	if spine < 0:
 		return
@@ -134,8 +157,8 @@ func _add_numbers(number: int) -> void:
 		l.font_size = 96 if side < 0 else 48
 		l.pixel_size = 0.0028
 		l.outline_size = 6
-		l.modulate = Color(0.97, 0.97, 0.97)
-		l.outline_modulate = Color(0.05, 0.05, 0.08)
+		l.modulate = kit["number"]
+		l.outline_modulate = kit["outline"]
 		l.double_sided = false
 		# The model faces +Z: the back is -Z. A Label3D reads from +Z, so the back one is turned round.
 		var want := Transform3D(Basis(Vector3.UP, PI if side < 0 else 0.0),
@@ -148,6 +171,7 @@ func _add_numbers(number: int) -> void:
 
 ## Each frame: place the athlete at the player, turn towards the heading, and blend the clips by velocity.
 func update_from(p: PlayerState, look: Vector3, dt: float) -> void:
+	throw_clock += dt
 	position = Vector3(p.pos.x, 0.0, p.pos.z)
 	var v := Vector3(p.vel.x, 0.0, p.vel.z)
 	var speed := v.length()
@@ -174,10 +198,24 @@ func update_from(p: PlayerState, look: Vector3, dt: float) -> void:
 	tree.set("parameters/scale/scale", s)
 
 
-func throw_now() -> void:
-	var rel: Variant = clips()["clips"]["throw"]["release"]
-	tree.set("parameters/seek/seek_request", maxf(0.0, float(rel) - THROW_LEAD))
+## A throw of this kind is wound up: the disc leaves the hand `lead` seconds from now (the sim's wind-up). The
+## clip starts where its own release is `lead` ahead, so the two releases meet. A backhand (and a pull) is one
+## of the two captured backhands; the forehand and the hammer are keyed.
+func start_throw(kind: String, lead: float) -> void:
+	var options: Array = THROW_CLIPS.get(kind, THROW_CLIPS["backhand"])
+	var clip: String = options[randi() % options.size()]
+	var node := (tree.tree_root as AnimationNodeBlendTree).get_node("throw_anim") as AnimationNodeAnimation
+	node.animation = _anim_name(anim.get_animation_list(), clip)
+	var rel: Variant = clips()["clips"][clip]["release"]
+	tree.set("parameters/seek/seek_request", maxf(0.0, float(rel) - lead))
 	tree.set("parameters/throw/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+	throwing = clip
+	throw_clock = maxf(0.0, float(rel) - lead)
+
+
+## The disc has already gone (no wind-up seen): play the clip from just before its release.
+func throw_now(kind: String = "backhand") -> void:
+	start_throw(kind, THROW_LEAD)
 
 
 func is_throwing() -> bool:

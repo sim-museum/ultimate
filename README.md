@@ -1,6 +1,6 @@
 # ultimate
 
-An ultimate frisbee game: seven against seven, self-refereed, in 3D. Built with Godot 4.
+A women's ultimate frisbee game: seven against seven, self-refereed, in 3D. Built with Godot 4.
 
 An early playable version: motion-captured athletes in team kits on a regulation field, playing full points
 from the pull to a goal, under a high broadcast camera or a camera behind the play.
@@ -17,7 +17,7 @@ To watch the AI play both teams:
 
 ## Controls
 
-You play Blue.
+You play White.
 
 - **On offence:** click a spot on the field to throw there.
   - `1` backhand, `2` forehand, `3` hammer.
@@ -25,7 +25,8 @@ You play Blue.
   - The marker counts to ten.
 - **On defence:** `WASD` or the arrow keys steer the highlighted player. `Tab` switches to the player
   nearest the disc.
-- `C` switches the camera: high broadcast, or behind the play at head height.
+- `C` switches the camera: the whole field from high up; a tower behind the sideline (high and wide); a lower,
+  tighter camera on the sideline that follows the disc; or behind the play at head height.
 - `F1` toggles autoplay. `Esc` quits.
 
 ## What's in it
@@ -48,9 +49,11 @@ You play Blue.
   - defence is person to person, with a reaction lag;
   - players chase the disc, and catch, block or lay out for it.
 
-- **The players:** human figures with skeletons, in jerseys and shorts tinted to the team, with numbers on
-  their backs. They run, jog, backpedal, idle and throw from motion capture, blended by each player's speed
-  and direction, face the way they run or the disc, and carry the disc in the throwing hand.
+- **The players:** women athletes with skeletons, in jerseys and shorts tinted to the team (White and
+  Maroon), some with dark undershirt sleeves, with numbers on their backs. The White team is mostly East Asian
+  players, the Maroon team mixed. They run, jog, backpedal and idle from motion capture, blended by each player's speed
+  and direction, face the way they run or the disc, and carry the disc in the throwing hand. Each throw winds
+  up before the disc leaves the hand: two captured backhands, and a forehand and a hammer keyed by hand.
 
 ## Layout
 
@@ -59,6 +62,7 @@ You play Blue.
 - `scripts/view/`: the 3D view, input and HUD.
 - `scenes/main.tscn`: the main scene.
 - `assets/players/`: the athletes (GLB, four body variants) and `clips.json`, which describes their clips.
+- `tools/athletes/`: how the athletes are built (Blender, MPFB, CMU motion capture).
 
 ## Credits
 

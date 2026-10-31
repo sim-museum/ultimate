@@ -22,6 +22,7 @@ const CATCH_TOP := 2.7         # m: the highest catch, jumping
 const MARK_DIST := 1.6         # m: the marker stands this far from the thrower (disc space)
 const COUNT_RANGE := 3.0       # m: the marker counts only within this distance
 const DT := 1.0 / 120.0
+const WINDUP := {"backhand": 0.4, "forehand": 0.3, "hammer": 0.45, "pull": 0.6}   # s from decision to release
 
 enum Phase { LINE_UP, PULL, PICKUP, HOLD, FLIGHT, GOAL, OVER }
 
@@ -29,7 +30,7 @@ var rng := RandomNumberGenerator.new()
 var teams: Array = [[], []]    # Array of PlayerState per team
 var dir: Array[int] = [1, -1]  # the end each team attacks: +1 = the end zone at +x
 var score: Array[int] = [0, 0]
-var names: Array[String] = ["Blue", "Red"]
+var names: Array[String] = ["White", "Maroon"]
 var offence := 0               # the team with the disc (during a pull: the receiving team)
 var phase := Phase.LINE_UP
 var phase_time := 0.0
@@ -51,6 +52,12 @@ var wind := Vector3.ZERO
 
 var tune := {"margin": 0.5, "react": REACT, "def_chance": DEF_CHANCE, "def_reach": DEF_REACH,
 		"hand_block": HAND_BLOCK, "break_penalty": 2.0, "late": -0.15, "swing": 4.0, "lean": 0.0, "goal_side": 2.5}   # the AI's knobs; ULT_TUNE (JSON) overrides them
+var pending: ThrowSolver.Release                # a throw being wound up (released when windup_left runs out)
+var pending_to: PlayerState
+var windup_left := 0.0
+var windup_kind := ""          # the kind of the last throw wound up (pull, backhand, forehand, hammer)
+var windup_by: PlayerState     # who wound it up
+var windups := 0               # throws (and pulls) wound up so far: the view starts the thrower's clip on a new one
 var events: Array = []         # [{t, text}], newest last
 var stats := {"throws": 0, "catches": 0, "turnovers": 0, "goals": 0, "pulls": 0, "stalls": 0, "blocks": 0}
 
@@ -70,7 +77,7 @@ func _init(seed_value: int = 1, human_side: int = 0) -> void:
 			var p := PlayerState.new(t, i, numbers[t][i])
 			p.speed = PlayerState.SPRINT * rng.randf_range(0.93, 1.0)
 			teams[t].append(p)
-	start_point(1)                              # Red pulls first (the toss)
+	start_point(1)                              # Maroon pulls first (the toss)
 
 
 func say(text: String) -> void:
@@ -92,6 +99,7 @@ func start_point(puller: int) -> void:
 	receiver = null
 	thrower = null
 	is_pull = false
+	windup_by = null
 	for t in 2:
 		var x := -Field.GOAL_LINE * dir[t]          # each team lines up on the goal line it defends
 		for i in PLAYERS:
@@ -114,6 +122,10 @@ func start_point(puller: int) -> void:
 func set_phase(p: Phase) -> void:
 	phase = p
 	phase_time = 0.0
+	if p != Phase.HOLD:
+		pending = null                             # a turnover or a goal cancels a throw being wound up
+		pending_to = null
+		windup_left = 0.0
 
 
 func _pick_human() -> void:
@@ -144,6 +156,10 @@ func step(dt: float = DT) -> void:
 	phase_time += dt
 	match phase:
 		Phase.LINE_UP:
+			if windup_by == null and phase_time > 1.5 - float(WINDUP.pull):
+				windup_by = teams[pulling_team()][3]         # the puller winds up
+				windup_kind = "pull"
+				windups += 1
 			if phase_time > 1.5:
 				_throw_pull()
 		Phase.FLIGHT, Phase.PULL:
@@ -172,7 +188,8 @@ func step(dt: float = DT) -> void:
 func _throw_pull() -> void:
 	var puller: PlayerState = teams[pulling_team()][3]
 	var d: int = dir[pulling_team()]
-	var target := Vector3(d * rng.randf_range(Field.GOAL_LINE - 14.0, Field.GOAL_LINE + 6.0), 0.0,
+	# A women's pull: 40-58 m, from the puller's goal line to between midfield and the receiving goal line.
+	var target := Vector3(d * rng.randf_range(Field.GOAL_LINE - 24.0, Field.GOAL_LINE - 6.0), 0.0,
 			rng.randf_range(-9.0, 9.0))
 	release = ThrowSolver.solve(puller.pos, target, "pull", false, false)
 	release.path = DiscFlight.simulate(release.state, ThrowSolver.SOLVE_DT, 0.0)
@@ -213,11 +230,11 @@ func _release(p: PlayerState, r: ThrowSolver.Release, to: PlayerState) -> void:
 
 ## The human's throw: to a spot on the field. kind: backhand, forehand or hammer.
 func user_throw(target: Vector3, kind: String, inside_out: bool = false, huck: bool = false) -> bool:
-	if phase != Phase.HOLD or offence != human_team or holder == null:
+	if phase != Phase.HOLD or offence != human_team or holder == null or windup_left > 0.0:
 		return false
 	var r := ThrowSolver.solve(holder.pos, target, kind, huck, inside_out) if huck \
 			else ThrowSolver.solve_auto(holder.pos, target, kind, inside_out)
-	_throw(r, _nearest(offence, target, holder))
+	_start_throw(r, _nearest(offence, target, holder))
 	return true
 
 
@@ -263,7 +280,7 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	if to != null:
 		to.role = "receive"
 		to.goal = _catch_spot(to, r)
-	say("%s #%d %s to #%d" % [names[offence], who.number, r.kind if r.speed < 26.0 else r.kind + " huck",
+	say("%s #%d %s to #%d" % [names[offence], who.number, r.kind if r.speed < ThrowSolver.HUCK_OVER else r.kind + " huck",
 			to.number if to else 0])
 
 
@@ -474,8 +491,28 @@ func _hold(dt: float) -> void:
 				_turnover(holder.pos, "stall")
 				return
 			say("Stalling %d" % n)
+	if windup_left > 0.0:
+		windup_left -= dt
+		if windup_left <= 0.0:
+			var r := pending
+			var to := pending_to
+			pending = null
+			pending_to = null
+			_throw(r, to)
+		return
 	if offence != human_team:
 		_ai_throw()
+
+
+## A throw is decided, then released WINDUP[kind] seconds later: the wind-up (the view plays it). The count
+## goes on meanwhile: a throw started at nine can still be stalled.
+func _start_throw(r: ThrowSolver.Release, to: PlayerState) -> void:
+	pending = r
+	pending_to = to
+	windup_kind = r.kind
+	windup_by = holder
+	windup_left = float(WINDUP.get(r.kind, 0.35))
+	windups += 1
 
 
 ## The AI thrower: for each team-mate, a spot where they will be (or the space ahead of them) and the
@@ -486,6 +523,8 @@ func _ai_throw() -> void:
 	if hold_time < 1.0:
 		return
 	var d: int = dir[offence]
+	# The wind-up: everyone runs for this long before the disc flies (the backhand's and forehand's, averaged).
+	var w := 0.5 * (float(WINDUP.backhand) + float(WINDUP.forehand))
 	var best: PlayerState = null
 	var best_score := -1e9
 	var best_margin := -1e9
@@ -498,7 +537,7 @@ func _ai_throw() -> void:
 			continue
 		for into_space in [false, true]:
 			var spot := p.pos
-			var t := 0.8
+			var t := 0.8 + w
 			for _k in 2:
 				# Where the runner will be: along their run towards their goal, at their current pace
 				# (a cutter slows at the end of the cut), or into the space past it.
@@ -511,9 +550,9 @@ func _ai_throw() -> void:
 				spot = p.pos + ahead
 				spot = Vector3(clampf(spot.x, -Field.HALF_L + 1.0, Field.HALF_L - 1.0), 0,
 						clampf(spot.z, -Field.HALF_W + 1.5, Field.HALF_W - 1.5))
-				t = 0.3 + spot.distance_to(holder.pos) / 16.0
+				t = w + 0.3 + spot.distance_to(holder.pos) / 16.0
 			var dist := spot.distance_to(holder.pos)
-			if dist < 5.0 or dist > 55.0:
+			if dist < 5.0 or dist > ThrowSolver.MAX_REACH:
 				continue
 			var r_t := p.pos.distance_to(spot) / (p.speed * 0.85) + 0.45
 			var d_t := 1e9
@@ -550,7 +589,7 @@ func _ai_throw() -> void:
 	var right := Vector3(d, 0, 0).cross(Vector3.UP)
 	var side := (best_spot - holder.pos).dot(right)
 	var kind := "forehand" if side > 0.0 else "backhand"
-	_throw(ThrowSolver.solve_auto(holder.pos, best_spot, kind), best)
+	_start_throw(ThrowSolver.solve_auto(holder.pos, best_spot, kind), best)
 
 
 # ---------------------------------------------------------------- movement

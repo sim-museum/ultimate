@@ -4,7 +4,12 @@ extends RefCounted
 ## target spot, by flying the disc: the speed by bisection on the distance, the heading by correcting for
 ## the curve, a few rounds of each.
 
-const MAX_SPEED := 32.0
+## Women's ultimate (PO 2026-10-30: "in the women's game the huck is low because women don't have the upper body
+## strength to hurl the disk way high"): the fastest release is about 27 m/s (a long huck of about 44 m), a huck
+## is a flat, low, driving throw, and a pull (with its run-up) about 29 m/s.
+const MAX_SPEED := 27.0
+const PULL_MAX_SPEED := 29.0
+const MAX_REACH := 44.0         # m: the longest throw at MAX_SPEED (measured: a huck reaches 44.7 m)
 const MIN_SPEED := 5.0
 const CATCH_HEIGHT := 1.3
 const SOLVE_DT := 1.0 / 60.0
@@ -17,9 +22,10 @@ const KINDS := {
 	"backhand": [4.0, 3.0, -12.0, 1.0, -0.4],
 	"forehand": [4.0, 3.0, 12.0, 0.9, 0.5],
 	"hammer": [25.0, 4.0, 10.0, 2.0, 0.3],
-	"pull": [16.0, 2.0, -8.0, 1.0, -0.4],
+	"pull": [13.0, 2.0, -8.0, 1.0, -0.4],
 }
-const HUCK_EXTRA := [8.0, 1.0]     # a huck: launch this much higher (elevation, angle of attack)
+const HUCK_EXTRA := [3.0, 0.5]     # a huck: launch this much higher (elevation, angle of attack): low and driving
+const HUCK_OVER := 22.0           # m/s: a flat throw that needs more than this is thrown as a huck
 
 
 class Release:
@@ -58,12 +64,13 @@ static func solve(thrower_pos: Vector3, target: Vector3, kind: String, huck: boo
 	var to_target := flat_target - Vector3(thrower_pos.x, 0.0, thrower_pos.z)
 	var dist := to_target.length()
 	var yaw := atan2(to_target.z, to_target.x)
-	var speed := MAX_SPEED
+	var top := PULL_MAX_SPEED if kind == "pull" else MAX_SPEED
+	var speed := top
 	var path: Array = []
 	for _round in 4:
 		var heading := Vector3(cos(yaw), 0.0, sin(yaw))
 		var lo := MIN_SPEED
-		var hi := MAX_SPEED
+		var hi := top
 		for _i in 14:
 			var mid := 0.5 * (lo + hi)
 			var p := _fly(release_state(thrower_pos, heading, kind, huck, inside_out, mid))
@@ -93,7 +100,7 @@ static func solve(thrower_pos: Vector3, target: Vector3, kind: String, huck: boo
 ## A throw at the default height for the target: a flat throw if it gets there, else a huck.
 static func solve_auto(thrower_pos: Vector3, target: Vector3, kind: String, inside_out: bool = false) -> Release:
 	var r := solve(thrower_pos, target, kind, false, inside_out)
-	if not r.reachable or r.speed > 26.0:
+	if not r.reachable or r.speed > HUCK_OVER:
 		var h := solve(thrower_pos, target, kind, true, inside_out)
 		if h.reachable or not r.reachable:
 			return h
