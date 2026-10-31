@@ -43,7 +43,9 @@ BONE_SEG = {
     "RightFingerBase": "rhand", "RThumb": "rthumb", "RightHandIndex1": "rfingers",
 }
 
-# name, trial, start s, end s, loop. A loop searches for the best cycle starting near `start` and ending before `end`.
+# name, trial, start s, end s, loop[, speed]. A loop searches for the best cycle starting near `start` and ending
+# before `end`. speed: the clip plays that many times faster than captured (CMU's sideways steps are a slow walk;
+# three times as fast they are a defender's shuffle).
 CLIPS = [
     ("idle", "79_92", 0.05, 0.75, True),
     ("jog", "16_35", 0.10, 1.30, True),
@@ -53,6 +55,8 @@ CLIPS = [
     ("diag_r", "102_25", 0.90, 1.85, True),
     ("backhand", "79_92", 0.80, 2.20, False),
     ("backhand2", "79_92", 2.55, 3.95, False),
+    ("side_a", "69_42", 0.50, 3.00, True, 3.0),     # sideways (the measured velocity says which way)
+    ("side_b", "69_48", 0.50, 3.00, True, 3.0),
 ]
 
 # The game is women's ultimate. Five women with East Asian features (the white team is mostly East Asian players),
@@ -313,7 +317,7 @@ def best_loop(feats, a0, a1, b_min, b_max):
     return best
 
 
-def clip_frames(name, trial, t0, t1, loop):
+def clip_frames(name, trial, t0, t1, loop, speed=1.0):
     sk = cmu_amc.Skeleton(os.path.join(CMU, trial.split("_")[0] + ".asf"))
     frames = cmu_amc.read_amc(os.path.join(CMU, trial + ".amc"), sk)
     res = [cmu_amc.fk(sk, f) for f in frames]
@@ -344,9 +348,9 @@ def clip_frames(name, trial, t0, t1, loop):
     vel = (p_b - p_a) / T if loop else np.zeros(3)
     vel[1] = 0.0
     # Body-frame velocity in game terms: x right, z forward (CMU: +X left, +Z forward).
-    v_body = {"right": float(-vel[0]), "forward": float(vel[2])}
+    v_body = {"right": float(-vel[0]) * speed, "forward": float(vel[2]) * speed}
     out = []
-    for i in range(a, b + 1 if not loop else b, STEP):
+    for i in range(a, b + 1 if not loop else b, max(1, int(round(STEP * speed)))):
         g, end, pos = res[i]
         gl = {s: ry @ m for s, m in g.items()}
         p = ry @ pos
@@ -363,7 +367,7 @@ def clip_frames(name, trial, t0, t1, loop):
         release = (k + 1) / HZ
         log(f"{name}: release at {release:.2f} s, wrist {max(sp):.1f} m/s")
     return sk, out, {"loop": loop, "length": len(out) / FPS, "velocity": v_body, "release": release,
-                     "source": f"CMU {trial} {a / HZ:.2f}-{b / HZ:.2f} s"}
+                     "source": f"CMU {trial} {a / HZ:.2f}-{b / HZ:.2f} s" + (f" x{speed:g}" if speed != 1.0 else "")}
 
 
 class RigInfo:

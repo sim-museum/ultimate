@@ -6,7 +6,7 @@ set -e
 D=${CMU_DIR:-~/ultimate_re/cmu}
 mkdir -p "$D"
 cd "$D"
-for t in 09_01 16_35 35_17 76_11 79_92 102_24 102_25; do
+for t in 09_01 16_35 35_17 69_42 69_48 76_11 79_92 102_24 102_25; do
     s=${t%%_*}
     [ -f "$s.asf" ] || curl -sSf -o "$s.asf" "http://mocap.cs.cmu.edu/subjects/$s/$s.asf"
     [ -f "$t.amc" ] || curl -sSf -o "$t.amc" "http://mocap.cs.cmu.edu/subjects/$s/$t.amc"

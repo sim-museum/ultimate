@@ -62,7 +62,8 @@ You play White.
   Maroon), some with dark undershirt sleeves, knee sleeves or headbands, with numbers on their backs. Two
   observers in orange keep level with the play on the sidelines. Substitutes watch from the far sideline,
   in front of the boards, tents and a full stand. The White team is mostly East Asian
-  players, the Maroon team mixed. They run, jog, backpedal and idle from motion capture, blended by each player's speed
+  players, the Maroon team mixed. They run, jog, backpedal, shuffle sideways and idle from motion capture, with their planted feet held
+  still by foot locking, blended by each player's speed
   and direction, face the way they run or the disc, and carry the disc in the throwing hand. Each throw winds
   up before the disc leaves the hand: two captured backhands, and a forehand and a hammer keyed by hand.
 
