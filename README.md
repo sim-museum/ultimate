@@ -55,7 +55,8 @@ You play White.
   seconds.
 - **The AI:**
   - offence runs a vertical stack with cuts under and deep;
-  - the thrower picks the receiver who wins the race to the disc;
+  - the thrower picks the receiver who wins the race to the disc, and holds a throw whose low early stretch a
+    defender could cut off, until the count runs late (so hucks are rare: mostly a late-count hail mary);
   - defence is person to person, with a reaction lag, or a zone: a cup of three round the thrower, a middle,
     two wings and a deep, sliding with the disc and closing on attackers in their area (Maroon plays zone);
   - against a zone the offence swings the disc along a line of handlers and looks for the holes;

@@ -33,6 +33,14 @@ const WINDUP := {"backhand": 0.4, "forehand": 0.3, "hammer": 0.45, "pull": 0.6, 
 const LEFTY_RANGE := 18.0      # m: the AI's longest lefty forehand
 const LEFTY_HAND := 0.5        # its share of the marker's chance of a hand on a break
 const LEFTY_ERROR := 1.4       # its aiming error over a right-handed throw's
+## A long throw's lane (ULTIMATE-1 sprint 4): a huck stays low, at a height a defender can reach, for its first
+## LANE_TO m (traced: 40 of 48 in-flight blocks came in the first 60% of hucks, mostly 8-15 m out, from defenders
+## in the stack). The thrower looks along that stretch for a defender who could get there in time.
+const LOOK_AGAIN := 0.15      # s: a thrower who held a throw back looks again after this
+const LANE_MIN := 20.0         # m: throws this long are checked
+const LANE_FROM := 3.0
+const LANE_TO := 16.0
+const LANE_SPEED := 18.0       # m/s: the disc's pace over that stretch
 const HANDLERS := 3            # the first three of each team (by index) are handlers: they throw the lefty forehand
 const GUST := 0.35             # gusts: up to this share of the steady wind, either way
 const WIND_RISK := 0.25        # the AI's score cost per (m/s of wind x s in the air): floaty throws in wind are risky
@@ -64,6 +72,8 @@ var holder: PlayerState
 var thrower: PlayerState       # the last thrower (cannot catch their own throw)
 var receiver: PlayerState      # the intended receiver of the throw in the air
 var release: ThrowSolver.Release
+var look_again := 0.0          # s until the thrower looks again (after a throw held back for a defender in its path)
+var last_block := {}            # the last in-flight block, for tracing (_defended)
 var is_pull := false
 var last_in := Vector3.ZERO    # the disc's last in-bounds spot over the ground (out-of-bounds restarts)
 var stall := 0.0
@@ -76,7 +86,7 @@ var wind_base := Vector3.ZERO      # the steady wind (ULT_WIND="speed,direction 
 var tune := {"margin": 0.5, "react": REACT, "def_chance": DEF_CHANCE, "def_reach": DEF_REACH,
 		"hand_block": HAND_BLOCK, "break_penalty": 2.0, "late": -0.15, "swing": 4.0, "lean": 0.0, "goal_side": 2.5,
 		"zone_swing": 2.0, "swing_margin": 0.15, "cup_block": 0.45,
-		"zone_area": 7.0, "zone_shade": 0.4, "zone_hand": 0.5}   # the AI's knobs; ULT_TUNE (JSON) overrides them
+		"zone_area": 7.0, "zone_shade": 0.4, "zone_hand": 0.5, "lane_penalty": 3.0}   # the AI's knobs; ULT_TUNE (JSON) overrides them
 ## Each team's defence: "person" (person to person) or "zone" (a cup of three round the thrower, a middle, two
 ## wings and a deep; common in the women's game: the PO's semifinal recording is a zone throughout). Maroon plays
 ## zone by default; ULT_DEFENCE="person,zone" (White, Maroon) overrides.
@@ -291,6 +301,48 @@ func _release(p: PlayerState, r: ThrowSolver.Release, to: PlayerState) -> void:
 	last_in = Vector3(disc.pos.x, 0, disc.pos.z)
 	stall = 0.0
 	stall_called = 0
+
+
+## Whether a long throw's low stretch (LANE_FROM to LANE_TO m along the line) is clear: no defender (the mark
+## aside) could reach a point of it, after reacting, by the time the disc is there (`w`: the wind-up).
+func lane_open(from: Vector3, to: Vector3, w: float) -> bool:
+	var v := Vector3(to.x - from.x, 0, to.z - from.z)
+	var n := v.length()
+	if n < 0.1:
+		return true
+	v /= n
+	for q: PlayerState in teams[1 - offence]:
+		if q.role == "mark":
+			continue
+		var s := LANE_FROM
+		while s <= minf(LANE_TO, n - 5.0):
+			var t := w + s / LANE_SPEED
+			var reach := q.speed * maxf(t - float(tune.react), 0.0) + float(tune.def_reach)
+			if q.pos.distance_to(from + v * s) <= reach:
+				return false
+			s += 1.0
+	return true
+
+
+## Whether a throw's flight is clear of defenders (the mark aside) while it is low enough to reach: from LANE_FROM m
+## out until 3 m short of its target, no defender could get within reach of the disc, after reacting, in time.
+func path_open(from: Vector3, r: ThrowSolver.Release, w: float) -> bool:
+	var target := Vector3(r.arrival.x, 0, r.arrival.z).distance_to(Vector3(from.x, 0, from.z))
+	for e in r.path:
+		var q: Vector3 = e[1]
+		var out := Vector3(q.x - from.x, 0, q.z - from.z).length()
+		if out < LANE_FROM or q.y > CATCH_TOP:
+			continue
+		if out > target - 3.0:
+			break
+		var t: float = w + e[0]
+		for d: PlayerState in teams[1 - offence]:
+			if d.role == "mark":
+				continue
+			var reach := d.speed * maxf(t - float(tune.react), 0.0) + float(tune.def_reach)
+			if Vector3(d.pos.x - q.x, 0, d.pos.z - q.z).length() <= reach:
+				return false
+	return true
 
 
 ## The human's throw: to a spot on the field. kind: any of ThrowSolver.KINDS.
@@ -517,6 +569,16 @@ func _caught(p: PlayerState) -> void:
 
 func _defended(p: PlayerState) -> void:
 	stats.blocks += 1
+	# For tracing (tests/probe_blocks.gd): who got it, how far through the flight, where the receiver was.
+	var dv := Vector3(disc.vel.x, 0, disc.vel.z).normalized()
+	last_block = {"marks_receiver": receiver != null and p.mark == receiver, "role": p.role, "zone_role": p.zone_role,
+			"frac": disc.time / maxf(release.path[-1][0], 0.01) if release != null and release.path.size() > 0 else 0.0,
+			"flight": release.path[-1][0] if release != null and release.path.size() > 0 else 0.0,
+			"recv_d": Vector2(receiver.pos.x - disc.pos.x, receiver.pos.z - disc.pos.z).length() if receiver != null else -1.0,
+			"def_d": Vector2(p.pos.x - disc.pos.x, p.pos.z - disc.pos.z).length(),
+			"from_behind": (Vector3(p.pos.x - disc.pos.x, 0, p.pos.z - disc.pos.z)).dot(dv) < 0.0,
+			"height": disc.pos.y, "length": thrower.pos.distance_to(release.arrival) if thrower != null and release != null else 0.0,
+			"kind": release.kind if release != null else "", "hold": hold_time, "stall": stall}
 	var spot := Field.clamp_restart(Vector3(p.pos.x, 0, p.pos.z), dir[1 - offence])
 	if rng.randf() < 0.4 and Field.in_bounds(p.pos):
 		say("%s #%d intercepts" % [names[1 - offence], p.number])
@@ -601,6 +663,7 @@ func _take(p: PlayerState) -> void:
 	stall = 0.0
 	stall_called = 0
 	hold_time = 0.0
+	look_again = 0.0
 	set_phase(Phase.HOLD)
 	for q: PlayerState in teams[offence]:
 		if q != p:
@@ -672,6 +735,9 @@ func _start_throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 func _ai_throw() -> void:
 	if hold_time < 1.0:
 		return
+	if look_again > 0.0:
+		look_again -= DT
+		return
 	var d: int = dir[offence]
 	var zone := defence[1 - offence] == "zone"
 	# The wind-up: everyone runs for this long before the disc flies (the backhand's and forehand's, averaged).
@@ -713,6 +779,7 @@ func _ai_throw() -> void:
 					continue
 				d_t = minf(d_t, maxf(q.pos.distance_to(spot) - tune.def_reach, 0.0) / (q.speed * 0.85) + 0.25)
 			var breaking := is_break(holder.pos, spot)
+			var lane_shut := (dist >= LANE_MIN or not zone) and not lane_open(holder.pos, spot, w)
 			var cup := zone and through_cup(holder.pos, spot)
 			var cand_kind := ""
 			if cup and not breaking and dist <= CLOUD_RANGE:
@@ -726,7 +793,7 @@ func _ai_throw() -> void:
 			elif breaking:
 				cand_kind = "high"                             # a break goes over the mark
 			var margin := d_t - maxf(t, r_t)
-			var blocked := breaking or cup
+			var blocked := breaking or cup or lane_shut
 			if margin > safe_margin and not blocked:
 				safe_margin = margin
 				safe = p
@@ -739,6 +806,8 @@ func _ai_throw() -> void:
 			if blocked:
 				# Throw to the open side (round the cup) if you can; a high release over the mark halves the cost.
 				sc -= float(tune.break_penalty) * (0.5 if cand_kind in ["high", "lefty"] else 1.0)
+			if lane_shut:
+				sc -= float(tune.lane_penalty)                  # a defender in the huck's low stretch
 			if Field.in_attacking_endzone(spot, d):
 				sc += 2.0
 			if sc > best_score:
@@ -787,6 +856,12 @@ func _ai_throw() -> void:
 			var r2 := ThrowSolver.solve_auto(holder.pos, lead, kind)
 			if r2.reachable:
 				r = r2
+	# Against a person defence, look along the throw's real flight (it curves, and it is led): if a defender is in
+	# its low stretch, wait for a better look unless the count is late.
+	if not zone and stall < 7.0 and not path_open(holder.pos, r, float(WINDUP.get(kind, 0.35))):
+		stats["lane_waits"] = stats.get("lane_waits", 0) + 1
+		look_again = LOOK_AGAIN
+		return
 	_start_throw(r, best)
 
 
