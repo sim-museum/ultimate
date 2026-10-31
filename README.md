@@ -29,6 +29,9 @@ You play White.
   nearest the disc. `Z` calls your team's defence, zone or person to person, from the next pull.
 - `C` switches the camera: the whole field from high up; a tower behind the sideline (high and wide); a lower,
   tighter camera on the sideline that follows the disc; or behind the play at head height.
+- `I` shows or hides the player card: the disc holder's (or your player's) Self, nerves and whether a protector
+  has taken over. The HUD names the moment (the opening, game point, universe point); `--score=14,14` starts at
+  universe point.
 - `L` switches the light: a clear midday or a low late-afternoon sun with long shadows (`--light=late` starts
   with it).
 - `F1` toggles autoplay. `Esc` quits.

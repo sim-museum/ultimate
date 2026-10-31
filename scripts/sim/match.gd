@@ -168,6 +168,18 @@ func moment_pressure() -> float:
 	return clampf(stakes * (PRESSURE_BASE + maxf(opening, late)), 0.0, 1.0)
 
 
+## The stage of the game, as the players feel it: "universe point", "game point", "opening" (the first points of
+## a big game) or "".
+func stage() -> String:
+	if score[0] == GAME_TO - 1 and score[1] == GAME_TO - 1:
+		return "universe point"
+	if maxi(score[0], score[1]) == GAME_TO - 1:
+		return "game point"
+	if score[0] + score[1] < OPENING_POINTS and stakes > 0.7:
+		return "opening"
+	return ""
+
+
 ## A steady wind of `speed` m/s blowing towards `deg` degrees (0: towards +x, 90: towards +z).
 func set_wind(speed: float, deg: float) -> void:
 	wind_base = Vector3(cos(deg_to_rad(deg)), 0, sin(deg_to_rad(deg))) * speed
@@ -957,6 +969,10 @@ func _ai_throw() -> void:
 		stats["lane_waits"] = stats.get("lane_waits", 0) + 1
 		look_again = LOOK_AGAIN
 		return
+	if fire > 0.1 and best_spot.distance_to(holder.pos) >= 30.0:
+		say("#%d can't wait: the huck" % holder.number)
+	elif mgr > 0.3 and swinging:
+		say("#%d plays it safe" % holder.number)
 	_start_throw(r, best)
 
 

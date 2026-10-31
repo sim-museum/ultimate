@@ -5,11 +5,13 @@ extends Node3D
 ## Offence: click a spot on the field to throw there. 1 backhand, 2 forehand, 3 hammer, 4-7 blade, scoober, push,
 ## cloud, 8 lefty forehand (the off hand); hold Shift for
 ## inside-out, hold Space for a huck. Defence: WASD or the arrow keys steer the highlighted player, Tab
-## switches to the player nearest the disc. Z: your defence (zone or person). L: the light (midday or late sun).
+## switches to the player nearest the disc. Z: your defence (zone or person). I: the player card (the
+## disc holder's inner world). L: the light (midday or late sun).
 ## C: the next camera (field, tower, sideline, behind). F1: autoplay (both
 ## teams AI). Esc: quit.
 ##
-## Command line (after --): --autoplay, --seed=N, --wind=speed[,degrees], --light=day|late, --screenshot=path.png [--frames=N], --cam=field|tower|sideline|close
+## Command line (after --): --autoplay, --seed=N, --wind=speed[,degrees], --light=day|late, --score=W,M (start there:
+## 14,14 is universe point), --screenshot=path.png [--frames=N], --cam=field|tower|sideline|close
 
 ## The kits: White (navy shorts and undershirts, navy numbers) and Maroon (black shorts and undershirts, white numbers).
 const KITS := [
@@ -51,10 +53,12 @@ var target_marker: MeshInstance3D
 var camera: Camera3D
 var hud: Label
 var help: Label
+var card: Label                     # the player card: the disc holder's (or your player's) inner world; I hides it
 var log_label: Label
 var kind := "backhand"
 var high := false                  # backhands and forehands released high, over the mark
 var wind_arg := ""                 # --wind=speed[,direction degrees]
+var score_arg := ""                # --score=W,M
 var light := "day"                 # a key into LIGHTS; L switches
 var sun: DirectionalLight3D
 var sky_mat: ProceduralSkyMaterial
@@ -76,6 +80,8 @@ func _ready() -> void:
 			autoplay = true
 		elif a.begins_with("--seed="):
 			seed_value = int(a.split("=")[1])
+		elif a.begins_with("--score="):
+			score_arg = a.get_slice("=", 1)
 		elif a.begins_with("--light="):
 			light = a.get_slice("=", 1) if LIGHTS.has(a.get_slice("=", 1)) else "day"
 		elif a.begins_with("--wind="):
@@ -88,6 +94,9 @@ func _ready() -> void:
 			var c := a.split("=")[1]
 			cam_mode = 3 if c == "close" else maxi(0, CAMERAS.find(c))
 	sim = UltimateMatch.new(seed_value, -1 if autoplay else 0)
+	if score_arg != "":
+		var sp := score_arg.split(",")
+		sim.score = [int(sp[0]), int(sp[1]) if sp.size() > 1 else int(sp[0])]
 	if wind_arg != "":
 		var wp := wind_arg.split(",")
 		sim.set_wind(float(wp[0]), float(wp[1]) if wp.size() > 1 else 90.0)
@@ -144,6 +153,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_Z:
 				var now: String = sim.defence_call[0] if sim.defence_call[0] != "" else sim.defence[0]
 				sim.call_defence(0, "person" if now == "zone" else "zone")
+			KEY_I:
+				card.visible = not card.visible
 			KEY_L:
 				light = "late" if light == "day" else "day"
 				_apply_light()
@@ -380,8 +391,16 @@ func _build_hud() -> void:
 	help.add_theme_font_size_override("font_size", 16)
 	help.add_theme_color_override("font_outline_color", Color.BLACK)
 	help.add_theme_constant_override("outline_size", 5)
-	help.text = "Offence: click to throw  ·  1 backhand  2 forehand  3 hammer  4 blade  5 scoober  6 push  7 cloud  8 lefty forehand  ·  H high release  ·  Shift inside-out  ·  Space huck\nDefence: WASD / arrows  ·  Tab switch  ·  Z zone or person     L light  ·  C camera  ·  F1 autoplay  ·  Esc quit"
+	help.text = "Offence: click to throw  ·  1 backhand  2 forehand  3 hammer  4 blade  5 scoober  6 push  7 cloud  8 lefty forehand  ·  H high release  ·  Shift inside-out  ·  Space huck\nDefence: WASD / arrows  ·  Tab switch  ·  Z zone or person     I inner world  ·  L light  ·  C camera  ·  F1 autoplay  ·  Esc quit"
 	layer.add_child(help)
+	card = Label.new()
+	card.anchor_left = 1.0
+	card.anchor_right = 1.0
+	card.position = Vector2(-430, 14)
+	card.add_theme_font_size_override("font_size", 18)
+	card.add_theme_color_override("font_outline_color", Color.BLACK)
+	card.add_theme_constant_override("outline_size", 5)
+	layer.add_child(card)
 
 
 # ---------------------------------------------------------------- per frame
@@ -485,6 +504,26 @@ func _update_camera(delta: float) -> void:
 			camera.look_at(cam_focus + Vector3(0, 0, -2))
 
 
+## The player card (ULTIMATE-6): whoever has the disc (else your player): her Self-energy, how stirred her nerves
+## are, and whether a protector has taken over.
+func _update_card() -> void:
+	if not card.visible:
+		return
+	var p: PlayerState = sim.holder if sim.holder != null else sim.human
+	if p == null:
+		card.text = ""
+		return
+	var inn: Inner = p.inner
+	var n := int(round(inn.nerves * 10.0))
+	var who := "%s #%d" % [sim.names[p.team], p.number]
+	var state := "Self-led"
+	if inn.firefighter > 0.1 and inn.firefighter >= inn.manager:
+		state = "firefighter blended: can't bear to wait"
+	elif inn.manager > 0.1:
+		state = "manager blended: playing it safe"
+	card.text = "%s   Self %d%%\nnerves  %s\n%s" % [who, int(inn.self_energy * 100.0), "■".repeat(n) + "□".repeat(10 - n), state]
+
+
 func _update_hud() -> void:
 	var stall_txt := ""
 	if sim.phase == UltimateMatch.Phase.HOLD and sim.stall_called > 0:
@@ -496,8 +535,10 @@ func _update_hud() -> void:
 	mode += "        your defence: " + call
 	if sim.wind_base != Vector3.ZERO:
 		mode += "        wind %.0f m/s" % sim.wind.length()
-	hud.text = "%s %d  –  %d %s        %s on offence %s%s\n%s" % [sim.names[0], sim.score[0], sim.score[1],
-			sim.names[1], who, arrow, stall_txt, mode]
+	var st: String = sim.stage()
+	hud.text = "%s %d  –  %d %s        %s on offence %s%s%s\n%s" % [sim.names[0], sim.score[0], sim.score[1],
+			sim.names[1], who, arrow, stall_txt, ("        " + st.to_upper()) if st != "" else "", mode]
+	_update_card()
 	var lines: Array = []
 	for e in sim.events.slice(-6):
 		lines.append(e.text)
