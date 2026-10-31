@@ -16,6 +16,7 @@ const LAYOUT_REACH := 2.4      # m: a full-length dive
 const LAYOUT_TOP := 1.0        # m: a layout is for a low disc
 const LAYOUT_CHANCE := 0.05    # per tick (120 Hz) while it is in reach
 const REACT := 0.35            # s: a defender's reaction to a cut or a throw
+const HAND_BLOCK := 0.25       # a break throw past a close mark: the marker's chance of a hand on it
 const DROP := 0.03             # a catchable disc dropped (about one catch in thirty)
 const CATCH_TOP := 2.7         # m: the highest catch, jumping
 const MARK_DIST := 1.6         # m: the marker stands this far from the thrower (disc space)
@@ -48,6 +49,8 @@ var stall_called := 0
 var hold_time := 0.0
 var wind := Vector3.ZERO
 
+var tune := {"margin": 0.5, "react": REACT, "def_chance": DEF_CHANCE, "def_reach": DEF_REACH,
+		"hand_block": HAND_BLOCK, "break_penalty": 2.0, "late": -0.15, "swing": 4.0, "lean": 0.0, "goal_side": 2.5}   # the AI's knobs; ULT_TUNE (JSON) overrides them
 var events: Array = []         # [{t, text}], newest last
 var stats := {"throws": 0, "catches": 0, "turnovers": 0, "goals": 0, "pulls": 0, "stalls": 0, "blocks": 0}
 
@@ -55,6 +58,12 @@ var stats := {"throws": 0, "catches": 0, "turnovers": 0, "goals": 0, "pulls": 0,
 func _init(seed_value: int = 1, human_side: int = 0) -> void:
 	rng.seed = seed_value
 	human_team = human_side
+	var env := OS.get_environment("ULT_TUNE")
+	if env != "":
+		var extra = JSON.parse_string(env)
+		if extra is Dictionary:
+			for k in extra:
+				tune[k] = float(extra[k])
 	var numbers := [[4, 7, 10, 12, 21, 23, 88], [2, 5, 9, 14, 17, 31, 44]]
 	for t in 2:
 		for i in PLAYERS:
@@ -212,12 +221,28 @@ func user_throw(target: Vector3, kind: String, inside_out: bool = false, huck: b
 	return true
 
 
+## The side the marker takes away: the mark stands on it (the force sends throws to the other, open side).
+func mark_side() -> Vector3:
+	return Vector3(dir[offence] * 0.6, 0, -1.4).normalized()
+
+
+## A throw towards the marked side, past a close mark: a break.
+func is_break(from: Vector3, to: Vector3) -> bool:
+	var m := _marker()
+	if m == null or m.pos.distance_to(from) > COUNT_RANGE:
+		return false
+	var v := Vector3(to.x - from.x, 0, to.z - from.z)
+	var side := Vector3(0, 0, signf(mark_side().z))      # across the field, towards the mark
+	return v.length() > 0.1 and v.normalized().dot(side) > 0.45
+
+
 func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
-	# Execution: a little error in every throw, more under a close mark.
+	# Execution: a little error in every throw, more under a close mark, most for a break past it.
 	var pressure := 1.0
 	var marker := _marker()
+	var breaking := is_break(holder.pos, r.arrival)
 	if marker != null and marker.pos.distance_to(holder.pos) < COUNT_RANGE:
-		pressure = 1.6
+		pressure = 2.2 if breaking else 1.6
 	var yaw_err := rng.randfn(0.0, deg_to_rad(1.0) * pressure)
 	var speed_err := 1.0 + rng.randfn(0.0, 0.015 * pressure)
 	var s := r.state
@@ -229,6 +254,11 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	release = r
 	_release(who, r, to)
 	stats.throws += 1
+	if breaking and rng.randf() < float(tune.hand_block):
+		stats.blocks += 1
+		say("%s #%d gets a hand to the break throw" % [names[1 - offence], marker.number])
+		_turnover(Vector3(who.pos.x, 0, who.pos.z) + mark_side(), "hand block")
+		return
 	set_phase(Phase.FLIGHT)
 	if to != null:
 		to.role = "receive"
@@ -298,13 +328,13 @@ func _layout(t: int, chance: float) -> PlayerState:
 func _catcher(t: int) -> PlayerState:
 	var best: PlayerState = null
 	var on_d := t != offence
-	var best_d := DEF_REACH if on_d else REACH
+	var best_d: float = tune.def_reach if on_d else REACH
 	for p: PlayerState in teams[t]:
 		if p == thrower and not is_pull:
 			continue
 		var d := Vector2(p.pos.x - disc.pos.x, p.pos.z - disc.pos.z).length()
 		var sure := DEF_SURE if on_d else 0.6
-		var chance := DEF_CHANCE if on_d else 0.35
+		var chance: float = tune.def_chance if on_d else 0.35
 		if d < best_d and (d < sure or rng.randf() < chance):
 			best_d = d
 			best = p
@@ -460,6 +490,9 @@ func _ai_throw() -> void:
 	var best_score := -1e9
 	var best_margin := -1e9
 	var best_spot := Vector3.ZERO
+	var safe: PlayerState = null           # late in the count: the throw with the most time to spare, anywhere
+	var safe_margin := -1e9
+	var safe_spot := Vector3.ZERO
 	for p: PlayerState in teams[offence]:
 		if p == holder:
 			continue
@@ -487,10 +520,18 @@ func _ai_throw() -> void:
 			for q: PlayerState in teams[1 - offence]:
 				if q.role == "mark":
 					continue
-				d_t = minf(d_t, maxf(q.pos.distance_to(spot) - DEF_REACH, 0.0) / (q.speed * 0.85) + 0.25)
+				d_t = minf(d_t, maxf(q.pos.distance_to(spot) - tune.def_reach, 0.0) / (q.speed * 0.85) + 0.25)
 			var margin := d_t - maxf(t, r_t)
+			if margin > safe_margin and not is_break(holder.pos, spot):
+				safe_margin = margin
+				safe = p
+				safe_spot = spot
+			if r_t > t + float(tune.late):
+				continue                                      # they would not get there in time
 			var progress := (spot.x - holder.pos.x) * d
 			var sc := clampf(margin, -2.0, 2.0) * 3.0 + 0.06 * progress - (1.0 if dist > 40.0 else 0.0)
+			if is_break(holder.pos, spot):
+				sc -= float(tune.break_penalty)               # throw to the open side if you can
 			if Field.in_attacking_endzone(spot, d):
 				sc += 2.0
 			if sc > best_score:
@@ -498,9 +539,13 @@ func _ai_throw() -> void:
 				best = p
 				best_margin = margin
 				best_spot = spot
+	if stall >= float(tune.swing) and (best == null or best_margin < tune.margin) and safe != null:
+		best = safe                                            # swing it: the dump, the safest look
+		best_spot = safe_spot
+		best_margin = safe_margin
 	if best == null:
 		return
-	if best_margin < 0.5 and stall < 7.0:
+	if best_margin < tune.margin and stall < 8.0:
 		return
 	var right := Vector3(d, 0, 0).cross(Vector3.UP)
 	var side := (best_spot - holder.pos).dot(right)
@@ -558,7 +603,7 @@ func _ai_goal(p: PlayerState, dt: float) -> void:
 func _defend(p: PlayerState) -> void:
 	var a: PlayerState = p.mark
 	var d: int = dir[offence]
-	if phase == Phase.FLIGHT and release != null and disc.time > REACT:
+	if phase == Phase.FLIGHT and release != null and disc.time > tune.react:
 		if a == receiver:
 			p.goal = _catch_spot(p, release)           # go for the disc with the receiver
 			p.sprint = true
@@ -568,10 +613,10 @@ func _defend(p: PlayerState) -> void:
 			p.goal = land
 			return
 	# Goal side of the attacker, a step towards the disc: deep threats are taken away first.
-	var seen := a.pos - a.vel * REACT
+	var seen := a.pos - a.vel * float(tune.react)
 	var to_disc := (Vector3(disc.pos.x, 0, disc.pos.z) - seen)
-	var lean := to_disc.normalized() * 1.0 if to_disc.length() > 0.5 else Vector3.ZERO
-	p.goal = seen + Vector3(d * 1.8, 0, 0) + lean
+	var lean := to_disc.normalized() * float(tune.lean) if to_disc.length() > 0.5 else Vector3.ZERO
+	p.goal = seen + Vector3(d * float(tune.goal_side), 0, 0) + lean
 
 
 func _offence_goal(p: PlayerState, dt: float) -> void:
@@ -590,7 +635,7 @@ func _offence_goal(p: PlayerState, dt: float) -> void:
 				p.role = "cut"
 				p.timer = rng.randf_range(1.8, 2.6)
 				var deep := rng.randf() < 0.3
-				var side := -1.0 if rng.randf() < 0.65 else 1.0     # mostly to the open (forehand) side
+				var side := 1.0 if rng.randf() < 0.65 else -1.0     # mostly to the open side (away from the mark)
 				var ahead := rng.randf_range(28.0, 40.0) if deep else rng.randf_range(7.0, 15.0)
 				var x := clampf(base.x + d * ahead, -Field.HALF_L + 2.0, Field.HALF_L - 2.0)
 				p.goal = Vector3(x, 0, clampf(base.z + side * rng.randf_range(6.0, 12.0), -Field.HALF_W + 2.0, Field.HALF_W - 2.0))
@@ -617,7 +662,10 @@ func _stack_spot(p: PlayerState, base: Vector3, d: int) -> Vector3:
 	if k == 0:
 		return Vector3(clampf(base.x - d * 4.0, -Field.HALF_L + 1, Field.HALF_L - 1), 0,
 				clampf(base.z + 5.0, -Field.HALF_W + 1.5, Field.HALF_W - 1.5))
-	var x := clampf(base.x + d * (8.0 + 3.5 * k), -Field.HALF_L + 1.0, Field.HALF_L - 1.0)
+	var room := (Field.HALF_L - 2.0) - base.x * d             # metres ahead of the disc, to the back line
+	var start := clampf(room * 0.25, 3.0, 8.0)
+	var gap := clampf((room - start) / float(maxi(others.size() - 1, 1)), 1.8, 3.5)
+	var x := clampf(base.x + d * (start + gap * (k - 1)), -Field.HALF_L + 1.0, Field.HALF_L - 1.0)
 	return Vector3(x, 0, clampf(base.z * 0.3, -6.0, 6.0))
 
 
