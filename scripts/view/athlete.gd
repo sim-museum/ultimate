@@ -87,8 +87,9 @@ func _tint(kit: Dictionary, variant: String) -> void:
 			c = kit["jersey"]
 		elif n.begins_with("Shorts"):
 			c = kit["shorts"]
-		elif n.begins_with("Sleeves") or n.begins_with("KneeSleeves") or n.begins_with("Headband"):
-			c = kit["sleeves"]                           # the undershirt, knee sleeves and headbands match
+		elif n.begins_with("Sleeves") or n.begins_with("KneeSleeves") or n.begins_with("Headband") \
+				or n.begins_with("Visor"):
+			c = kit["sleeves"]                           # the undershirt, knee sleeves, headbands and visors match
 		if c.a == 0.0:
 			continue
 		var mat := StandardMaterial3D.new()

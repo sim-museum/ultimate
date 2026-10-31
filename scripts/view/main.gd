@@ -4,10 +4,11 @@ extends Node3D
 ##
 ## Offence: click a spot on the field to throw there. 1 backhand, 2 forehand, 3 hammer; hold Shift for
 ## inside-out, hold Space for a huck. Defence: WASD or the arrow keys steer the highlighted player, Tab
-## switches to the player nearest the disc. C: the next camera (field, tower, sideline, behind). F1: autoplay (both
+## switches to the player nearest the disc. Z: your defence (zone or person). L: the light (midday or late sun).
+## C: the next camera (field, tower, sideline, behind). F1: autoplay (both
 ## teams AI). Esc: quit.
 ##
-## Command line (after --): --autoplay, --seed=N, --wind=speed[,degrees], --screenshot=path.png [--frames=N], --cam=field|tower|sideline|close
+## Command line (after --): --autoplay, --seed=N, --wind=speed[,degrees], --light=day|late, --screenshot=path.png [--frames=N], --cam=field|tower|sideline|close
 
 ## The kits: White (navy shorts and undershirts, navy numbers) and Maroon (black shorts and undershirts, white numbers).
 const KITS := [
@@ -16,6 +17,14 @@ const KITS := [
 	{"jersey": Color(0.42, 0.08, 0.12), "shorts": Color(0.06, 0.05, 0.06), "sleeves": Color(0.05, 0.04, 0.05),
 		"number": Color(0.97, 0.97, 0.97), "outline": Color(0.1, 0.02, 0.03), "ring": Color(0.6, 0.12, 0.16)},
 ]
+## The light: a clear midday, or a late-afternoon sun low over the far stands with long shadows (the 2026 semifinal's
+## look). sun: [elevation, azimuth] degrees; colours for the sun, the sky's top and horizon; energies.
+const LIGHTS := {
+	"day": {"sun": [55.0, -30.0], "colour": Color(1, 1, 1), "energy": 1.1, "top": Color(0.32, 0.52, 0.82),
+		"horizon": Color(0.72, 0.8, 0.88), "ambient": 1.0},
+	"late": {"sun": [14.0, -150.0], "colour": Color(1.0, 0.8, 0.58), "energy": 1.45, "top": Color(0.3, 0.45, 0.72),
+		"horizon": Color(0.95, 0.78, 0.6), "ambient": 0.7},
+}
 ## The observers (the college game's): orange shirts, black shorts, no numbers; one on each sideline.
 const OBSERVER_KIT := {"jersey": Color(1.0, 0.45, 0.08), "shorts": Color(0.06, 0.05, 0.06), "sleeves": Color(0.06, 0.05, 0.06),
 		"number": Color.BLACK, "outline": Color.BLACK}
@@ -43,8 +52,12 @@ var hud: Label
 var help: Label
 var log_label: Label
 var kind := "backhand"
-var high := false
-var wind_arg := ""                 # --wind=speed[,direction degrees]                  # backhands and forehands released high, over the mark
+var high := false                  # backhands and forehands released high, over the mark
+var wind_arg := ""                 # --wind=speed[,direction degrees]
+var light := "day"                 # a key into LIGHTS; L switches
+var sun: DirectionalLight3D
+var sky_mat: ProceduralSkyMaterial
+var env_res: Environment
 var shot_path := ""
 var shot_frames := 240
 var frames := 0
@@ -62,6 +75,8 @@ func _ready() -> void:
 			autoplay = true
 		elif a.begins_with("--seed="):
 			seed_value = int(a.split("=")[1])
+		elif a.begins_with("--light="):
+			light = a.get_slice("=", 1) if LIGHTS.has(a.get_slice("=", 1)) else "day"
 		elif a.begins_with("--wind="):
 			wind_arg = a.get_slice("=", 1)
 		elif a.begins_with("--screenshot="):
@@ -126,6 +141,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_Z:
 				var now: String = sim.defence_call[0] if sim.defence_call[0] != "" else sim.defence[0]
 				sim.call_defence(0, "person" if now == "zone" else "zone")
+			KEY_L:
+				light = "late" if light == "day" else "day"
+				_apply_light()
 			KEY_C:
 				cam_mode = (cam_mode + 1) % CAMERAS.size()
 			KEY_F1:
@@ -194,14 +212,23 @@ func _box(size: Vector3, pos: Vector3, c: Color, unshaded: bool = false) -> Mesh
 	return b
 
 
+func _apply_light() -> void:
+	var l: Dictionary = LIGHTS[light]
+	sun.rotation_degrees = Vector3(-l["sun"][0], l["sun"][1], 0)
+	sun.light_color = l["colour"]
+	sun.light_energy = l["energy"]
+	sky_mat.sky_top_color = l["top"]
+	sky_mat.sky_horizon_color = l["horizon"]
+	env_res.ambient_light_energy = l["ambient"]
+
+
 func _build_world() -> void:
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
 	e.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var sm := ProceduralSkyMaterial.new()
-	sm.sky_top_color = Color(0.32, 0.52, 0.82)
-	sm.sky_horizon_color = Color(0.72, 0.8, 0.88)
+	sky_mat = sm
 	sm.ground_horizon_color = Color(0.3, 0.45, 0.3)
 	sm.ground_bottom_color = Color(0.14, 0.3, 0.15)
 	sky.sky_material = sm
@@ -209,12 +236,13 @@ func _build_world() -> void:
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.environment = e
+	env_res = e
 	add_child(env)
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-55, -30, 0)
+	sun = DirectionalLight3D.new()
 	sun.shadow_enabled = true
-	sun.light_energy = 1.1
+	sun.directional_shadow_max_distance = 220.0     # long late shadows reach across the field to the far camera
 	add_child(sun)
+	_apply_light()
 	camera = Camera3D.new()
 	camera.fov = 42.0
 	camera.far = 600.0
@@ -345,11 +373,11 @@ func _build_hud() -> void:
 	help = Label.new()
 	help.anchor_top = 1.0
 	help.anchor_bottom = 1.0
-	help.position = Vector2(20, -40)
+	help.position = Vector2(20, -60)
 	help.add_theme_font_size_override("font_size", 16)
 	help.add_theme_color_override("font_outline_color", Color.BLACK)
 	help.add_theme_constant_override("outline_size", 5)
-	help.text = "Offence: click to throw  ·  1 backhand  2 forehand  3 hammer  4 blade  5 scoober  6 push  7 cloud  ·  H high release  ·  Shift inside-out  ·  Space huck     Defence: WASD / arrows  ·  Tab switch  ·  Z zone or person     C camera  ·  F1 autoplay  ·  Esc quit"
+	help.text = "Offence: click to throw  ·  1 backhand  2 forehand  3 hammer  4 blade  5 scoober  6 push  7 cloud  ·  H high release  ·  Shift inside-out  ·  Space huck\nDefence: WASD / arrows  ·  Tab switch  ·  Z zone or person     L light  ·  C camera  ·  F1 autoplay  ·  Esc quit"
 	layer.add_child(help)
 
 

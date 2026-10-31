@@ -28,6 +28,8 @@ You play White.
   nearest the disc. `Z` calls your team's defence, zone or person to person, from the next pull.
 - `C` switches the camera: the whole field from high up; a tower behind the sideline (high and wide); a lower,
   tighter camera on the sideline that follows the disc; or behind the play at head height.
+- `L` switches the light: a clear midday or a low late-afternoon sun with long shadows (`--light=late` starts
+  with it).
 - `F1` toggles autoplay. `Esc` quits.
 - `godot --path . -- --wind=6,90` plays in a 6 m/s wind blowing across the field (degrees: 0 along it). The wind
   gusts; throwers allow for its steady part.
@@ -59,7 +61,7 @@ You play White.
   - players chase the disc, and catch, block or lay out for it.
 
 - **The players:** women athletes with skeletons, in jerseys and shorts tinted to the team (White and Maroon),
-  some with dark undershirt sleeves, knee sleeves or headbands, with numbers on their backs. Two observers in
+  some with dark undershirt sleeves, knee sleeves, headbands or visors, with numbers on their backs. Two observers in
   orange keep level with the play on the sidelines. Substitutes watch from the far sideline, in front of the
   boards, tents and a full stand. The White team is mostly East Asian players, the Maroon team mixed. They run,
   jog, backpedal, shuffle sideways and idle from motion capture, with their planted feet held still by foot
