@@ -39,10 +39,14 @@ You play White.
   - a goal for a catch in the attacked end zone, then the teams change ends and the scoring team pulls;
   - first to 15.
 - **The field:** 100 m by 37 m, 18 m end zones, brick marks 18 m from the goal lines.
-- **Disc flight:** gravity, lift and drag from the angle of attack, using the coefficient set common to
-  open frisbee flight models (after Hummel, 2003). The bank angle bends the throw. The hammer flies
-  upside down.
-- **Throws:** a throw solver finds the release speed and direction that bring the disc to the chosen spot.
+- **Disc flight:** a spinning rigid disc, after S. A. Hummel's six-degree-of-freedom frisbee model (M.S. thesis,
+  UC Davis, 2003): lift, drag, the pitching moment and its damping, roll damping and spin-down, with the lift,
+  drag and pitch coefficients Potts and Crowther (2002) measured in a wind tunnel. The disc's attitude moves in
+  flight, so a slowing backhand fades, a fast one turns, and a hyzer release draws an S. The hammer flies upside
+  down.
+- **Throws:** a throw solver finds the release (speed, direction, nose angle and bank, from a calibrated table of
+  a good thrower's releases) that brings the disc past the chosen spot at a catchable height; pulls hang six
+  seconds.
 - **The AI:**
   - offence runs a vertical stack with cuts under and deep;
   - the thrower picks the receiver who wins the race to the disc;

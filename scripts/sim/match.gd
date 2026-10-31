@@ -15,6 +15,8 @@ const DEF_CHANCE := 0.12       # a block's chance per tick between DEF_SURE and 
 const LAYOUT_REACH := 2.4      # m: a full-length dive
 const LAYOUT_TOP := 1.0        # m: a layout is for a low disc
 const LAYOUT_CHANCE := 0.05    # per tick (120 Hz) while it is in reach
+const BID_REACH := 1.6         # m: the intended receiver stretching (a step and a reach) for a disc flying past
+const BID_CHANCE := 0.08       # per tick while it is in that reach, at a catchable height
 const REACT := 0.35            # s: a defender's reaction to a cut or a throw
 const HAND_BLOCK := 0.25       # a break throw past a close mark: the marker's chance of a hand on it
 const DROP := 0.03             # a catchable disc dropped (about one catch in thirty)
@@ -218,9 +220,11 @@ func step(dt: float = DT) -> void:
 func _throw_pull() -> void:
 	var puller: PlayerState = teams[pulling_team()][3]
 	var d: int = dir[pulling_team()]
-	# A women's pull: 40-58 m, from the puller's goal line to between midfield and the receiving goal line.
-	var target := Vector3(d * rng.randf_range(Field.GOAL_LINE - 24.0, Field.GOAL_LINE - 6.0), 0.0,
-			rng.randf_range(-9.0, 9.0))
+	# A women's pull: 40-58 m on the old disc; on the rigid disc 35-45 m (its calibrated pulls, 6 s or more in the
+	# air), from the puller's goal line to past midfield.
+	var near := Field.GOAL_LINE - (29.0 if DiscFlight.rigid else 24.0)
+	var far := Field.GOAL_LINE - (19.0 if DiscFlight.rigid else 6.0)
+	var target := Vector3(d * rng.randf_range(near, far), 0.0, rng.randf_range(-9.0, 9.0))
 	release = ThrowSolver.solve(puller.pos, target, "pull", false, false)
 	release.path = DiscFlight.simulate(release.state, ThrowSolver.SOLVE_DT, 0.0)
 	release.arrival = release.path[-1][1]
@@ -292,6 +296,7 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 		pressure = 2.2 if breaking else 1.6
 	var yaw_err := rng.randfn(0.0, deg_to_rad(1.0) * pressure)
 	var speed_err := 1.0 + rng.randfn(0.0, 0.015 * pressure)
+	var aimed := r.arrival.distance_to(holder.pos)          # the throw's length to its target (for the stats)
 	var s := r.state
 	s.turn(yaw_err)
 	s.vel *= speed_err
@@ -302,8 +307,7 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	_release(who, r, to)
 	stats.throws += 1
 	stats["throws%d" % offence] = stats.get("throws%d" % offence, 0) + 1
-	var band := "len%d_%s" % [offence, "short" if r.arrival.distance_to(who.pos) < 15.0 else
-			("medium" if r.arrival.distance_to(who.pos) < 30.0 else "long")]
+	var band := "len%d_%s" % [offence, "short" if aimed < 15.0 else ("medium" if aimed < 30.0 else "long")]
 	stats[band] = stats.get(band, 0) + 1
 	stats["hold%d" % offence] = stats.get("hold%d" % offence, 0.0) + hold_time
 	if defence[1 - offence] == "zone":
@@ -396,6 +400,10 @@ func _fly(dt: float) -> void:
 			off_c = _layout(offence, LAYOUT_CHANCE)
 			if off_c != null:
 				say("Layout! #%d" % off_c.number)
+		if off_c == null and receiver != null and not is_pull and disc.pos.y < CATCH_TOP - 0.3 \
+				and Vector2(receiver.pos.x - disc.pos.x, receiver.pos.z - disc.pos.z).length() < BID_REACH \
+				and rng.randf() < BID_CHANCE:
+			off_c = receiver                     # a stretch for a pass flying by
 		if def_c == null and not is_pull and disc.vel.y < 0.0 and disc.pos.y < LAYOUT_TOP:
 			def_c = _layout(1 - offence, LAYOUT_CHANCE * 0.5)
 		if off_c != null:
@@ -701,7 +709,19 @@ func _ai_throw() -> void:
 	var right := Vector3(d, 0, 0).cross(Vector3.UP)
 	var side := (best_spot - holder.pos).dot(right)
 	var kind := "forehand" if side > 0.0 else "backhand"
-	_start_throw(ThrowSolver.solve_auto(holder.pos, best_spot, kind), best)
+	var r := ThrowSolver.solve_auto(holder.pos, best_spot, kind)
+	# Lead the receiver: with the throw's real flight time, where will they be? If that is off the spot, throw there.
+	var t_real := float(WINDUP.get(kind, 0.35)) + r.flight_time
+	var to_goal := Vector3(best.goal.x - best.pos.x, 0, best.goal.z - best.pos.z)
+	if to_goal.length() > 0.1 and best.vel.length() > 1.0:
+		var lead := best.pos + to_goal.normalized() * minf(to_goal.length(), best.vel.length() * t_real)
+		lead = Vector3(clampf(lead.x, -Field.HALF_L + 1.0, Field.HALF_L - 1.0), 0,
+				clampf(lead.z, -Field.HALF_W + 1.5, Field.HALF_W - 1.5))
+		if lead.distance_to(best_spot) > 1.0 and lead.distance_to(holder.pos) > 5.0:
+			var r2 := ThrowSolver.solve_auto(holder.pos, lead, kind)
+			if r2.reachable:
+				r = r2
+	_start_throw(r, best)
 
 
 # ---------------------------------------------------------------- movement

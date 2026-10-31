@@ -30,13 +30,13 @@ const RADIUS := 0.137
 ##   spin down    N = CNr w_spin                                                  about the axis
 ## The attitude then moves: a nose-up moment on a spinning disc rolls it (gyroscopic precession), which is the late
 ## fade of a slowing disc, and turnover, flip-up and air bounce come from the same equations.
-static var rigid := false          # true: the rigid disc; false: the fixed-attitude point mass above
+static var rigid := true           # true: the rigid disc; false: the fixed-attitude point mass above
 ## The lift, drag and pitch coefficients [CL0, CLA, CD0, CDA, CM0, CMA]: "hummel" (her short flights, about 13 m/s)
 ## or "potts" (Potts and Crowther's wind-tunnel measurements, linearised as in Hummel's Table 3-2). The damping
 ## and spin terms are Hummel's in both.
 const COEF_SETS := {"hummel": [0.3331, 1.9124, 0.1769, 0.685, -0.0821, 0.4338],
 		"potts": [0.2, 2.96, 0.08, 2.72, -0.02, 0.13]}
-static var coef: Array = COEF_SETS["hummel"]
+static var coef: Array = COEF_SETS["potts"]      # Hummel's own over-lift and turn over above about 20 m/s
 const H_CL0 := 0.3331
 const H_CLA := 1.9124
 const H_CD0 := 0.1769
