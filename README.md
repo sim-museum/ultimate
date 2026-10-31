@@ -61,6 +61,12 @@ You play White.
     two wings and a deep, sliding with the disc and closing on attackers in their area (Maroon plays zone);
   - against a zone the offence swings the disc along a line of handlers and looks for the holes;
   - players chase the disc, and catch, block or lay out for it.
+- **The players' inner worlds** (after the Internal Family Systems model): each player has her own Self-energy,
+  nerves (an exile's fear of failing the team) and two protectors, a careful manager and a firefighter who cannot
+  bear the tension. The game is a final: the pressure is highest in the opening points and at universe point,
+  lowest mid-game. Nerves shake throws and loosen catches; a blended manager plays it safe; a blended firefighter
+  hurries and throws the huck nobody tried all game. A mistake stirs her nerves; a completed pass, a goal and the
+  huddle between points settle them.
 
 - **The players:** women athletes with skeletons, in jerseys and shorts tinted to the team (White and Maroon),
   some with dark undershirt sleeves, knee sleeves or headbands, with numbers on their backs. Two observers in

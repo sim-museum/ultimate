@@ -20,7 +20,20 @@ const BID_CHANCE := 0.2        # per tick while it is in that reach, at a catcha
                                # passing 1.3 m away at 15 m/s)
 const REACT := 0.35            # s: a defender's reaction to a cut or a throw
 const HAND_BLOCK := 0.25       # a break throw past a close mark: the marker's chance of a hand on it
-const DROP := 0.03             # a catchable disc dropped (about one catch in thirty)
+const DROP := 0.03             # a catchable disc dropped (about one catch in thirty), Self-led; nerves add to it
+const DROP_NERVES := 3.0       # a fully stirred exile makes a drop this many times likelier again
+## The pressure of the moment (ULTIMATE-6), before each player's own Self and sensitivity: the stakes x (a base,
+## plus the larger of the opening points' and the late score's). PO: the 2025 final's bad throws and drops came
+## "at the beginning (with that start-of-big-championship-everything-on-the-line feeling) and at the end -
+## universe point".
+const PRESSURE_BASE := 0.3
+const OPENING := 0.5           # the first point of a big game; fades over OPENING_POINTS
+const OPENING_POINTS := 4.0
+const UNIVERSE := 0.75         # both a point from winning
+const GAME_POINT := 0.45
+const CLOSE_LATE := 0.3        # within a point of each other in the last few points
+const STALL_PRESSURE := 0.25   # the holder's own, by the end of the count
+const HUCK_URGE := 8.0         # a blended firefighter's pull towards the long throw (the AI's score, per unit blend)
 const CATCH_TOP := 2.7         # m: the highest catch, jumping
 const MARK_DIST := 1.6         # m: the marker stands this far from the thrower (disc space)
 const COUNT_RANGE := 3.0       # m: the marker counts only within this distance
@@ -73,6 +86,7 @@ var holder: PlayerState
 var thrower: PlayerState       # the last thrower (cannot catch their own throw)
 var receiver: PlayerState      # the intended receiver of the throw in the air
 var release: ThrowSolver.Release
+var stakes := 0.95             # how much the game means: a championship final (ULT_STAKES overrides)
 var look_again := 0.0          # s until the thrower looks again (after a throw held back for a defender in its path)
 var last_block := {}
 var last_miss := {}             # the last throw that came down uncaught, for tracing (tests/probe_blocks.gd)
@@ -131,8 +145,27 @@ func _init(seed_value: int = 1, human_side: int = 0) -> void:
 		for i in PLAYERS:
 			var p := PlayerState.new(t, i, numbers[t][i])
 			p.speed = PlayerState.SPRINT * rng.randf_range(0.93, 1.0)
+			p.inner = Inner.new(rng)
 			teams[t].append(p)
+	if OS.get_environment("ULT_STAKES") != "":
+		stakes = float(OS.get_environment("ULT_STAKES"))
 	start_point(1)                              # Maroon pulls first (the toss)
+
+
+## The pressure of the moment for everyone on the field (ULTIMATE-6): the stakes x (a base, plus the larger of the
+## opening points' and the late score's).
+func moment_pressure() -> float:
+	var played := float(score[0] + score[1])
+	var opening := OPENING * maxf(0.0, 1.0 - played / OPENING_POINTS)
+	var hi := maxi(score[0], score[1])
+	var late := 0.0
+	if score[0] == GAME_TO - 1 and score[1] == GAME_TO - 1:
+		late = UNIVERSE
+	elif hi == GAME_TO - 1:
+		late = GAME_POINT
+	elif hi >= GAME_TO - 4 and absi(score[0] - score[1]) <= 1:
+		late = CLOSE_LATE
+	return clampf(stakes * (PRESSURE_BASE + maxf(opening, late)), 0.0, 1.0)
 
 
 ## A steady wind of `speed` m/s blowing towards `deg` degrees (0: towards +x, 90: towards +z).
@@ -163,6 +196,9 @@ func pulling_team() -> int:
 ## Both lines on their goal lines: the pulling team on the line of the end zone it defends.
 func start_point(puller: int) -> void:
 	offence = 1 - puller
+	for t in 2:
+		for q: PlayerState in teams[t]:
+			q.inner.huddle()                          # the huddle between points
 	for t in 2:
 		if defence_call[t] != "":
 			defence[t] = defence_call[t]
@@ -232,6 +268,11 @@ func step(dt: float = DT) -> void:
 		var g := 1.0 + GUST * (0.6 * sin(clock * 0.53) + 0.4 * sin(clock * 1.71 + 1.3))
 		wind = wind_base.rotated(Vector3.UP, 0.15 * sin(clock * 0.31)) * g
 	ThrowSolver.wind = wind_base
+	var mp := moment_pressure()
+	for t in 2:
+		for q: PlayerState in teams[t]:
+			var own := STALL_PRESSURE * stall / 10.0 if q == holder else 0.0
+			q.inner.update(dt, clampf(mp + own, 0.0, 1.0))
 	phase_time += dt
 	match phase:
 		Phase.LINE_UP:
@@ -388,6 +429,7 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 		pressure = 2.2 if breaking else 1.6
 	if r.kind == "lefty_forehand":
 		pressure *= LEFTY_ERROR                              # the off hand
+	pressure *= holder.inner.shake()                         # nerves (ULTIMATE-6)
 	var yaw_err := rng.randfn(0.0, deg_to_rad(1.0) * pressure)
 	var speed_err := 1.0 + rng.randfn(0.0, 0.015 * pressure)
 	var aimed := r.arrival.distance_to(holder.pos)          # the throw's length to its target (for the stats)
@@ -555,10 +597,14 @@ func _catcher(t: int) -> PlayerState:
 
 
 func _caught(p: PlayerState) -> void:
-	if not is_pull and rng.randf() < DROP:
-		_turnover(Field.restart_point(Vector3(disc.pos.x, 0, disc.pos.z)), "#%d drops it" % p.number)
+	if not is_pull and rng.randf() < DROP * (1.0 + DROP_NERVES * p.inner.nerves):
+		_turnover(Field.restart_point(Vector3(disc.pos.x, 0, disc.pos.z)), "#%d drops it" % p.number, p)
 		return
 	stats.catches += 1
+	if not is_pull:
+		p.inner.touch()
+		if thrower != null:
+			thrower.inner.touch()
 	if not is_pull:
 		stats["air%d" % offence] = stats.get("air%d" % offence, 0.0) + disc.time      # a completed throw's time in the air
 		stats["airn%d" % offence] = stats.get("airn%d" % offence, 0) + 1
@@ -573,6 +619,9 @@ func _caught(p: PlayerState) -> void:
 	if Field.in_attacking_endzone(p.pos, dir[offence]):
 		score[offence] += 1
 		stats.goals += 1
+		for q: PlayerState in teams[offence]:
+			q.inner.touch()
+			q.inner.touch()
 		stats["goals%d" % offence] = stats.get("goals%d" % offence, 0) + 1
 		_end_possession()
 		say("GOAL %s #%d (from #%d).  %s %d, %s %d" % [names[offence], p.number, thrower.number,
@@ -601,6 +650,8 @@ func _defended(p: PlayerState) -> void:
 	if rng.randf() < 0.4 and Field.in_bounds(p.pos):
 		say("%s #%d intercepts" % [names[1 - offence], p.number])
 		_count_turnover("interception")
+		if thrower != null:
+			thrower.inner.own_error()
 		offence = 1 - offence
 		_take(p)
 		_pick_human()
@@ -644,8 +695,11 @@ func _end_possession() -> void:
 	stats[k] = stats.get(k, 0) + 1
 
 
-func _turnover(spot: Vector3, why: String) -> void:
+func _turnover(spot: Vector3, why: String, culprit: PlayerState = null) -> void:
 	_count_turnover(why.get_slice(" ", 0) if not why.begins_with("#") else "drop")
+	var c := culprit if culprit != null else thrower
+	if c != null and c.team == offence:
+		c.inner.own_error()                           # her own mistake stirs the exile
 	offence = 1 - offence
 	spot = Field.clamp_restart(spot, dir[offence])
 	say("Turnover (%s): %s's disc" % [why, names[offence]])
@@ -723,7 +777,7 @@ func _hold(dt: float) -> void:
 			if n >= STALL:
 				stats.stalls += 1
 				say("\"Ten\": stall")
-				_turnover(holder.pos, "stall")
+				_turnover(holder.pos, "stall", holder)
 				return
 			say("Stalling %d" % n)
 	if windup_left > 0.0:
@@ -755,7 +809,12 @@ func _start_throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 ## (the marker aside). Throws to the best margin, once a receiver is clearly first; late in the count,
 ## takes the best there is.
 func _ai_throw() -> void:
-	if hold_time < 1.0:
+	# Her protectors (ULTIMATE-6): a blended firefighter cannot bear to wait (she throws sooner and reaches for the
+	# long throw); a blended manager plays it safe (breaks feel riskier, ground matters less, she swings sooner).
+	var fire := holder.inner.firefighter
+	var mgr := holder.inner.manager
+	var hurried := fire > 0.1
+	if hold_time < (0.3 if hurried else 1.0):
 		return
 	if look_again > 0.0:
 		look_again -= DT
@@ -820,16 +879,20 @@ func _ai_throw() -> void:
 				safe_margin = margin
 				safe = p
 				safe_spot = spot
-			if r_t > t + float(tune.late):
-				continue                                      # they would not get there in time
+			if r_t > t + float(tune.late) + (3.0 * fire if dist >= 30.0 else 0.0):
+				continue                                      # they would not get there in time (a firefighter
+				                                              # throws the huck anyway: a hope, not a read)
 			var progress := (spot.x - holder.pos.x) * d
 			var wind_cost := WIND_RISK * wind_base.length() * maxf(t - w, 0.0)     # floaty throws in wind
-			var sc := clampf(margin, -2.0, 2.0) * 3.0 + 0.06 * progress - (1.0 if dist > 40.0 else 0.0) - wind_cost
+			var sc := clampf(margin, -2.0, 2.0) * 3.0 + 0.06 * (1.0 - 0.6 * mgr) * progress \
+					- (1.0 if dist > 40.0 else 0.0) - wind_cost
+			if dist >= 30.0:
+				sc += HUCK_URGE * fire                          # the firefighter's huck
 			if blocked:
 				# Throw to the open side (round the cup) if you can; a high release over the mark halves the cost.
-				sc -= float(tune.break_penalty) * (0.5 if cand_kind in ["high", "lefty"] else 1.0)
+				sc -= float(tune.break_penalty) * (0.5 if cand_kind in ["high", "lefty"] else 1.0) * (1.0 + mgr)
 			if lane_shut:
-				sc -= float(tune.lane_penalty)                  # a defender in the huck's low stretch
+				sc -= float(tune.lane_penalty) * (1.0 - minf(1.0, 3.0 * fire))   # a defender in the low stretch
 			if Field.in_attacking_endzone(spot, d):
 				sc += 2.0
 			if sc > best_score:
@@ -840,7 +903,7 @@ func _ai_throw() -> void:
 				best_kind = cand_kind
 	# Swing it (the dump, the safest look) when nothing better is on: from stall 4 against a person defence, sooner
 	# against a zone, which is beaten by moving the disc side to side.
-	var swing_at := float(tune.zone_swing) if zone else float(tune.swing)
+	var swing_at := (float(tune.zone_swing) if zone else float(tune.swing)) - 2.0 * mgr
 	var swinging := false
 	if stall >= swing_at and (best == null or best_margin < tune.margin) and safe != null \
 			and safe_margin >= float(tune.swing_margin):
@@ -851,7 +914,7 @@ func _ai_throw() -> void:
 		swinging = true
 	if best == null:
 		return
-	if best_margin < tune.margin and stall < 8.0 and not swinging:
+	if best_margin < tune.margin - 4.0 * fire and stall < 8.0 and not swinging:
 		return
 	var right := Vector3(d, 0, 0).cross(Vector3.UP)
 	var side := (best_spot - holder.pos).dot(right)
@@ -884,13 +947,13 @@ func _ai_throw() -> void:
 	# against a zone the receivers mostly stand in holes and out of bounds is rare.
 	var meet := Vector3(r.arrival.x, 0, r.arrival.z)
 	var r_meet := best.pos.distance_to(meet) / (best.speed * 0.85) + 0.45
-	if not zone and stall < 7.0 and r_meet > float(WINDUP.get(kind, 0.35)) + r.flight_time - float(tune.late):
+	if not zone and not hurried and stall < 7.0 and r_meet > float(WINDUP.get(kind, 0.35)) + r.flight_time - float(tune.late):
 		stats["late_waits"] = stats.get("late_waits", 0) + 1
 		look_again = LOOK_AGAIN
 		return
 	# Against a person defence, look along the throw's real flight (it curves, and it is led): if a defender is in
 	# its low stretch, wait for a better look unless the count is late.
-	if not zone and stall < 7.0 and not path_open(holder.pos, r, float(WINDUP.get(kind, 0.35))):
+	if not zone and not hurried and stall < 7.0 and not path_open(holder.pos, r, float(WINDUP.get(kind, 0.35))):
 		stats["lane_waits"] = stats.get("lane_waits", 0) + 1
 		look_again = LOOK_AGAIN
 		return

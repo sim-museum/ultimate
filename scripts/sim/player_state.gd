@@ -20,6 +20,7 @@ var zone_role := ""            # in a zone defence: cup, middle, wing_l, wing_r 
                                # the thrower marks)
 var steer := Vector3.ZERO      # a human player's stick direction (zero: the AI moves them)
 var sprint := false            # run through the goal at full speed (attacking the disc), no slowing down
+var inner: Inner               # her inner world: Self, the exile's nerves, the protectors (ULTIMATE-6)
 
 
 func _init(t: int, i: int, n: int) -> void:
