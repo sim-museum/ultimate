@@ -58,31 +58,33 @@ CLIPS = [
 # The game is women's ultimate. Five women with East Asian features (the white team is mostly East Asian players),
 # four others; ponytails, braids, buns: hair tied back, as in the real game.
 # "sleeves": the long-sleeved shirt, its forearms a separate piece the game tints dark (an undershirt).
+# "knee": knee sleeves ("l", "r" or "both"); "headband": a band round the forehead (both tinted like the undershirt).
+# The gold-standard broadcasts show knee sleeves, headbands and visors on many players.
 DEFAULT_VARIANTS = ["as1", "as2", "as3", "as4", "as5", "w1", "w2", "w4", "w5"]
 _F = {"gender": 0.0, "proxy": "female_muscle_13442"}
 _ASIA = {"african": 0.03, "asian": 0.94, "caucasian": 0.03}
 VARIANTS = {
     "as1": dict(_F, skin="young_asian_female", hair="ponytail01", eyebrows="eyebrow004", eyes="brown",
-                sleeves=True, phen=dict(_ASIA, height=0.42, muscle=0.66, weight=0.40)),
+                sleeves=True, knee="both", headband=False, phen=dict(_ASIA, height=0.42, muscle=0.66, weight=0.40)),
     "as2": dict(_F, skin="young_asian_female", hair="braid01", eyebrows="eyebrow002", eyes="brown",
-                sleeves=False, phen=dict(_ASIA, height=0.50, muscle=0.70, weight=0.42)),
+                sleeves=False, knee=None, headband=True, phen=dict(_ASIA, height=0.50, muscle=0.70, weight=0.42)),
     "as3": dict(_F, skin="young_asian_female", hair="bob01", eyebrows="eyebrow005", eyes="brownlight",
-                sleeves=True, phen=dict(_ASIA, height=0.46, muscle=0.64, weight=0.41)),
+                sleeves=True, knee="r", headband=False, phen=dict(_ASIA, height=0.46, muscle=0.64, weight=0.41)),
     "as4": dict(_F, skin="young_asian_female", hair="ponytail01", eyebrows="eyebrow008", eyes="brown",
-                sleeves=False, phen=dict(_ASIA, height=0.58, muscle=0.72, weight=0.43)),
+                sleeves=False, knee="both", headband=True, phen=dict(_ASIA, height=0.58, muscle=0.72, weight=0.43)),
     "as5": dict(_F, skin="young_asian_female", hair="short04", eyebrows="eyebrow003", eyes="brown",
-                sleeves=True, phen=dict(_ASIA, height=0.52, muscle=0.68, weight=0.40)),
+                sleeves=True, knee=None, headband=False, phen=dict(_ASIA, height=0.52, muscle=0.68, weight=0.40)),
     "w1": dict(_F, skin="young_african_female", hair="braid01", eyebrows="eyebrow002", eyes="brown",
-               sleeves=False, phen={"height": 0.55, "muscle": 0.68, "weight": 0.42, "african": 0.9, "asian": 0.05,
+               sleeves=False, knee="l", headband=True, phen={"height": 0.55, "muscle": 0.68, "weight": 0.42, "african": 0.9, "asian": 0.05,
                                     "caucasian": 0.05}),
     "w2": dict(_F, skin="young_caucasian_female", hair="ponytail01", eyebrows="eyebrow007", eyes="blue",
-               sleeves=True, phen={"height": 0.6, "muscle": 0.65, "weight": 0.4, "african": 0.05, "asian": 0.05,
+               sleeves=True, knee="both", headband=False, phen={"height": 0.6, "muscle": 0.65, "weight": 0.4, "african": 0.05, "asian": 0.05,
                                    "caucasian": 0.9}),
     "w4": dict(_F, skin="young_caucasian_female2", hair="ponytail01", eyebrows="eyebrow010", eyes="green",
-               sleeves=False, phen={"height": 0.65, "muscle": 0.62, "weight": 0.44, "african": 0.2, "asian": 0.1,
+               sleeves=False, knee=None, headband=True, phen={"height": 0.65, "muscle": 0.62, "weight": 0.44, "african": 0.2, "asian": 0.1,
                                     "caucasian": 0.7}),
     "w5": dict(_F, skin="young_african_female", hair="afro01", eyebrows="eyebrow011", eyes="brown",
-               sleeves=True, phen={"height": 0.62, "muscle": 0.7, "weight": 0.43, "african": 0.85, "asian": 0.05,
+               sleeves=True, knee="r", headband=False, phen={"height": 0.62, "muscle": 0.7, "weight": 0.43, "african": 0.85, "asian": 0.05,
                                    "caucasian": 0.1}),
     "a": {"skin": "young_african_male", "hair": "short02", "eyebrows": "eyebrow001", "eyes": "brown",
           "phen": {"height": 0.62, "muscle": 0.75, "weight": 0.45, "african": 0.9, "asian": 0.05,
@@ -235,6 +237,63 @@ def make_kit():
         bpy.data.objects.remove(basemesh)
     body.name = "Body"
     log("kit: cut at z", round(cut_z, 3), "knee", round(knee_z, 3), "hip", round(hip_z, 3))
+
+
+def make_accessories(v):
+    """Knee sleeves and a headband, cut from the body's own skin: the faces in a band round the knee (or the
+    forehead) are copied, pushed out along their normals, and kept as their own piece with the body's skin weights,
+    so they bend with the leg (or the head) exactly. Plain white materials: the game tints them."""
+    import bmesh
+    body = bpy.data.objects["Body"]
+    rig = next(o for o in bpy.data.objects if o.type == "ARMATURE")
+    pieces = []
+    if v.get("knee"):
+        sides = ["Left", "Right"] if v["knee"] == "both" else (["Left"] if v["knee"] == "l" else ["Right"])
+        for side in sides:
+            knee = rig.matrix_world @ rig.data.bones[f"{side}Leg"].head_local
+            pieces.append(("KneeSleeves", lambda c, k=knee: k.z - 0.07 < c.z < k.z + 0.09
+                           and math.hypot(c.x - k.x, c.y - k.y) < 0.11, 0.004, (knee.z - 0.06, knee.z + 0.08)))
+    if v.get("headband"):
+        top = max((body.matrix_world @ vx.co).z for vx in body.data.vertices)
+        head = rig.matrix_world @ rig.data.bones["Head"].head_local
+        pieces.append(("Headband", lambda c, t=top, h=head: t - 0.085 < c.z < t - 0.05
+                       and math.hypot(c.x - h.x, c.y - h.y) < 0.14, 0.009, (top - 0.08, top - 0.052)))
+    made = {}
+    for name, inside, push, (lo, hi) in pieces:
+        o = body.copy()
+        o.data = body.data.copy()
+        bpy.context.collection.objects.link(o)
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        mw = o.matrix_world
+        dead = [f for f in bm.faces if not inside(mw @ f.calc_center_median())]
+        bmesh.ops.delete(bm, geom=dead, context="FACES")
+        bm.normal_update()
+        # Straight edges: the kept faces overhang the band in a zigzag; pull their corners onto its edges.
+        mwi = mw.inverted()
+        for vx in bm.verts:
+            w = mw @ (vx.co + vx.normal * push)
+            w.z = min(max(w.z, lo), hi)
+            vx.co = mwi @ w
+        bm.to_mesh(o.data)
+        bm.free()
+        mat = bpy.data.materials.new(name)
+        mat.use_nodes = True
+        mat.use_backface_culling = False
+        mat.node_tree.nodes.get("Principled BSDF").inputs["Roughness"].default_value = 0.6
+        o.data.materials.clear()
+        o.data.materials.append(mat)
+        made.setdefault(name, []).append(o)
+    # One object per kind (both knees together).
+    for name, objs in made.items():
+        bpy.ops.object.select_all(action="DESELECT")
+        for o in objs:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = objs[0]
+        if len(objs) > 1:
+            bpy.ops.object.join()
+        bpy.context.view_layer.objects.active.name = name
+        log("accessory", name, len(bpy.context.view_layer.objects.active.data.polygons), "faces")
 
 
 # ---------------------------------------------------------------------------------------------- the motion
@@ -463,6 +522,7 @@ def main():
     for vn in names:
         build_human(f"athlete_{vn}", VARIANTS[vn])
         make_kit()
+        make_accessories(VARIANTS[vn])
         rig = bpy.data.objects["Athlete"]
         info = RigInfo(rig)
         mocap = {}

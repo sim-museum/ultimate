@@ -16,6 +16,11 @@ const KITS := [
 	{"jersey": Color(0.42, 0.08, 0.12), "shorts": Color(0.06, 0.05, 0.06), "sleeves": Color(0.05, 0.04, 0.05),
 		"number": Color(0.97, 0.97, 0.97), "outline": Color(0.1, 0.02, 0.03), "ring": Color(0.6, 0.12, 0.16)},
 ]
+## The observers (the college game's): orange shirts, black shorts, no numbers; one on each sideline.
+const OBSERVER_KIT := {"jersey": Color(1.0, 0.45, 0.08), "shorts": Color(0.06, 0.05, 0.06), "sleeves": Color(0.06, 0.05, 0.06),
+		"number": Color.BLACK, "outline": Color.BLACK}
+const OBSERVER_VARIANTS := ["w4", "w1"]
+const OBSERVER_OFF := 2.5          # m outside the sideline
 ## The cameras: the whole field from high up; a high wide tower behind the sideline (as in the 2026 semifinal's
 ## broadcast); a lower tight sideline camera following the disc (the 2025 final's); behind the play at head height.
 const CAMERAS := ["field", "tower", "sideline", "behind"]
@@ -25,6 +30,7 @@ const LINE := Color(0.95, 0.95, 0.92)
 
 var sim: UltimateMatch
 var bodies: Array = [[], []]       # Athlete per player
+var observers: Array = []          # [Athlete, PlayerState] per sideline: they walk level with the disc
 var windups_drawn := 0             # wind-ups (throws and pulls) the athletes have animated
 var tags: Array = [[], []]         # Label3D per player
 var rings: Array = [[], []]        # the ring under each player (holder, receiver, human)
@@ -226,6 +232,15 @@ func _build_field() -> void:
 
 
 func _build_players() -> void:
+	for k in 2:
+		var o := Athlete.new()
+		add_child(o)
+		o.setup(OBSERVER_VARIANTS[k], OBSERVER_KIT, 0)
+		var st := PlayerState.new(-1, k, 0)
+		st.speed = 5.0
+		st.pos = Vector3(0, 0, (Field.HALF_W + OBSERVER_OFF) * (1.0 if k == 0 else -1.0))
+		st.goal = st.pos
+		observers.append([o, st])
 	for t in 2:
 		for i in UltimateMatch.PLAYERS:
 			var p := Athlete.new()
@@ -312,6 +327,13 @@ func _update_players(delta: float) -> void:
 	if sim.windups != windups_drawn and sim.windup_by != null:
 		(bodies[sim.windup_by.team][sim.windup_by.idx] as Athlete).start_throw(sim.windup_kind, _release_in())
 	windups_drawn = sim.windups
+	for ob in observers:
+		var st: PlayerState = ob[1]
+		var level := clampf(sim.disc.pos.x, -Field.HALF_L + 4.0, Field.HALF_L - 4.0)
+		if absf(level - st.pos.x) > 3.0:             # keep level with the play, without chasing every step
+			st.goal = Vector3(level, 0, st.pos.z)
+		st.move(delta)
+		(ob[0] as Athlete).update_from(st, sim.disc.pos, delta)
 	for t in 2:
 		for i in UltimateMatch.PLAYERS:
 			var p: PlayerState = sim.teams[t][i]

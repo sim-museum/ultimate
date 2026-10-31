@@ -74,8 +74,8 @@ func _tint(kit: Dictionary, variant: String) -> void:
 			c = kit["jersey"]
 		elif n.begins_with("Shorts"):
 			c = kit["shorts"]
-		elif n.begins_with("Sleeves"):
-			c = kit["sleeves"]
+		elif n.begins_with("Sleeves") or n.begins_with("KneeSleeves") or n.begins_with("Headband"):
+			c = kit["sleeves"]                           # the undershirt, knee sleeves and headbands match
 		if c.a == 0.0:
 			continue
 		var mat := StandardMaterial3D.new()
@@ -143,7 +143,7 @@ func _anim_name(names: PackedStringArray, want: String) -> String:
 ## The number on the back (and smaller on the front), riding on the upper spine so it leans and twists with it.
 func _add_numbers(number: int, kit: Dictionary) -> void:
 	var spine := skeleton.find_bone("Spine1")
-	if spine < 0:
+	if spine < 0 or number <= 0:                       # no number (an observer)
 		return
 	var att := BoneAttachment3D.new()
 	att.bone_name = "Spine1"
