@@ -2,8 +2,8 @@
 
 An ultimate frisbee game: seven against seven, self-refereed, in 3D. Built with Godot 4.
 
-This is the first playable version: a graybox. Capsule players on a regulation field, under a high
-broadcast camera, playing full points from the pull to a goal.
+An early playable version: motion-captured athletes in team kits on a regulation field, playing full points
+from the pull to a goal, under a high broadcast camera or a camera behind the play.
 
 ## Running it
 
@@ -25,6 +25,7 @@ You play Blue.
   - The marker counts to ten.
 - **On defence:** `WASD` or the arrow keys steer the highlighted player. `Tab` switches to the player
   nearest the disc.
+- `C` switches the camera: high broadcast, or behind the play at head height.
 - `F1` toggles autoplay. `Esc` quits.
 
 ## What's in it
@@ -47,11 +48,23 @@ You play Blue.
   - defence is person to person, with a reaction lag;
   - players chase the disc, and catch, block or lay out for it.
 
+- **The players:** human figures with skeletons, in jerseys and shorts tinted to the team, with numbers on
+  their backs. They run, jog, backpedal, idle and throw from motion capture, blended by each player's speed
+  and direction, face the way they run or the disc, and carry the disc in the throwing hand.
+
 ## Layout
 
 - `scripts/sim/`: the game itself, with no rendering: field, disc flight, throw solver, players, match
   rules and AI.
 - `scripts/view/`: the 3D view, input and HUD.
 - `scenes/main.tscn`: the main scene.
+- `assets/players/`: the athletes (GLB, four body variants) and `clips.json`, which describes their clips.
+
+## Credits
+
+- **Bodies, skins, hair and clothes:** made with MakeHuman / MPFB; models exported from MakeHuman are CC0.
+- **Motion:** the CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu). "The collection of the data in
+  this database was supported by NSF Grant #0196217." Its terms: the data "may be copied, modified, or
+  redistributed without permission."
 
 The licence is still to be decided.

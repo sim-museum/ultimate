@@ -1,20 +1,23 @@
 extends Node3D
-## The graybox view: the field, capsule players, the disc and a high broadcast camera over the match
+## The view: the field, motion-captured athletes (scripts/view/athlete.gd), the disc and a high broadcast camera over the match
 ## simulation (scripts/sim). Blue is the human's team.
 ##
 ## Offence: click a spot on the field to throw there. 1 backhand, 2 forehand, 3 hammer; hold Shift for
 ## inside-out, hold Space for a huck. Defence: WASD or the arrow keys steer the highlighted player, Tab
-## switches to the player nearest the disc. F1: autoplay (both teams AI). Esc: quit.
+## switches to the player nearest the disc. C: the camera (broadcast or behind the play). F1: autoplay (both teams AI).
+## Esc: quit.
 ##
-## Command line (after --): --autoplay, --seed=N, --screenshot=path.png [--frames=N]
+## Command line (after --): --autoplay, --seed=N, --screenshot=path.png [--frames=N], --cam=close
 
 const TEAM_COLOURS := [Color(0.16, 0.36, 0.86), Color(0.85, 0.22, 0.2)]
+const SHORTS := [Color(0.08, 0.1, 0.2), Color(0.12, 0.08, 0.08)]
 const FIELD_GREEN := Color(0.2, 0.47, 0.22)
 const GRASS := Color(0.16, 0.38, 0.18)
 const LINE := Color(0.95, 0.95, 0.92)
 
 var sim: UltimateMatch
-var bodies: Array = [[], []]       # MeshInstance3D per player
+var bodies: Array = [[], []]       # Athlete per player
+var throws_drawn := 0              # throws and pulls the athletes have animated
 var tags: Array = [[], []]         # Label3D per player
 var rings: Array = [[], []]        # the ring under each player (holder, receiver, human)
 var disc_node: MeshInstance3D
@@ -29,6 +32,8 @@ var shot_path := ""
 var shot_frames := 240
 var frames := 0
 var cam_focus := Vector3.ZERO
+var cam_close := false             # C: behind the play at head height (as in the AUDL 22 prototype) or broadcast
+var cam_pos := Vector3(0, 30, 46)
 
 
 func _ready() -> void:
@@ -44,6 +49,8 @@ func _ready() -> void:
 			shot_path = a.split("=")[1]
 		elif a.begins_with("--frames="):
 			shot_frames = int(a.split("=")[1])
+		elif a == "--cam=close":
+			cam_close = true
 	sim = UltimateMatch.new(seed_value, -1 if autoplay else 0)
 	_build_world()
 	_build_field()
@@ -57,7 +64,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
-	_update_players()
+	_update_players(delta)
 	_update_disc()
 	_update_camera(delta)
 	_update_hud()
@@ -80,6 +87,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				kind = "hammer"
 			KEY_TAB:
 				sim.switch_human()
+			KEY_C:
+				cam_close = not cam_close
 			KEY_F1:
 				sim.human_team = -1 if sim.human_team == 0 else 0
 				sim.switch_human()
@@ -207,13 +216,10 @@ func _build_field() -> void:
 func _build_players() -> void:
 	for t in 2:
 		for i in UltimateMatch.PLAYERS:
-			var p := MeshInstance3D.new()
-			var cap := CapsuleMesh.new()
-			cap.radius = 0.32
-			cap.height = 1.8
-			p.mesh = cap
-			p.material_override = _material(TEAM_COLOURS[t])
+			var p := Athlete.new()
 			add_child(p)
+			p.setup(Athlete.VARIANTS[(i + 2 * t) % Athlete.VARIANTS.size()], TEAM_COLOURS[t], SHORTS[t],
+					sim.teams[t][i].number)
 			bodies[t].append(p)
 			var tag := Label3D.new()
 			tag.text = str(sim.teams[t][i].number)
@@ -284,22 +290,29 @@ func _build_hud() -> void:
 	help.add_theme_font_size_override("font_size", 16)
 	help.add_theme_color_override("font_outline_color", Color.BLACK)
 	help.add_theme_constant_override("outline_size", 5)
-	help.text = "Offence: click to throw  ·  1 backhand  2 forehand  3 hammer  ·  Shift inside-out  ·  Space huck     Defence: WASD / arrows  ·  Tab switch     F1 autoplay  ·  Esc quit"
+	help.text = "Offence: click to throw  ·  1 backhand  2 forehand  3 hammer  ·  Shift inside-out  ·  Space huck     Defence: WASD / arrows  ·  Tab switch     C camera  ·  F1 autoplay  ·  Esc quit"
 	layer.add_child(help)
 
 
 # ---------------------------------------------------------------- per frame
 
-func _update_players() -> void:
+func _update_players(delta: float) -> void:
+	# A throw (or a pull): the sim releases the disc at once, so the thrower's clip starts at its release. The
+	# counters catch every throw, the ones a hand block stops at once included.
+	var n_throws: int = sim.stats.throws + sim.stats.pulls
+	if n_throws != throws_drawn and sim.thrower != null:
+		(bodies[sim.thrower.team][sim.thrower.idx] as Athlete).throw_now()
+	throws_drawn = n_throws
 	for t in 2:
 		for i in UltimateMatch.PLAYERS:
 			var p: PlayerState = sim.teams[t][i]
-			var b: MeshInstance3D = bodies[t][i]
-			b.position = p.pos + Vector3(0, 0.9, 0)
-			# Lean into the run.
-			var v := Vector3(p.vel.x, 0, p.vel.z)
-			b.rotation = Vector3(v.z * 0.03, 0, -v.x * 0.03)
+			var b: Athlete = bodies[t][i]
+			var look := sim.disc.pos
+			if p == sim.holder:
+				look = p.pos + Vector3(sim.dir[t] * 10.0, 0, 0)    # the thrower looks downfield
+			b.update_from(p, look, delta)
 			tags[t][i].position = p.pos + Vector3(0, 2.3, 0)
+			tags[t][i].visible = not cam_close      # close up, the numbers on the jerseys are enough
 			var ring: MeshInstance3D = rings[t][i]
 			var colour := Color.TRANSPARENT
 			if p == sim.holder:
@@ -317,6 +330,9 @@ func _update_players() -> void:
 func _update_disc() -> void:
 	var s := sim.disc
 	disc_node.position = s.pos
+	# Held: the disc is in the holder's right hand (drawn there; the sim keeps its own spot).
+	if sim.holder != null and sim.phase in [UltimateMatch.Phase.HOLD, UltimateMatch.Phase.PICKUP]:
+		disc_node.position = (bodies[sim.holder.team][sim.holder.idx] as Athlete).hand_position()
 	var n := s.normal if sim.phase in [UltimateMatch.Phase.FLIGHT, UltimateMatch.Phase.PULL] else Vector3.UP
 	var axis := Vector3.UP.cross(n)
 	if axis.length() > 1e-4:
@@ -330,9 +346,20 @@ func _update_disc() -> void:
 
 func _update_camera(delta: float) -> void:
 	# A high broadcast camera on the sideline, following the disc along the field.
+	var k := clampf(delta * 1.8, 0.0, 1.0)
+	if cam_close:
+		# Behind the disc, looking the way the offence attacks: the players at human size.
+		var d := float(sim.dir[sim.offence])
+		var focus := Vector3(sim.disc.pos.x, 0, sim.disc.pos.z)
+		cam_focus = cam_focus.lerp(focus, k)
+		cam_pos = cam_pos.lerp(cam_focus + Vector3(-d * 10.0, 5.0, 2.5), k)
+		camera.position = cam_pos
+		camera.look_at(cam_focus + Vector3(d * 12.0, 0.8, 0))
+		return
 	var focus := Vector3(clampf(sim.disc.pos.x, -38.0, 38.0), 0, clampf(sim.disc.pos.z * 0.5, -6.0, 6.0))
-	cam_focus = cam_focus.lerp(focus, clampf(delta * 1.8, 0.0, 1.0))
-	camera.position = cam_focus + Vector3(0, 30, 46)
+	cam_focus = cam_focus.lerp(focus, k)
+	cam_pos = cam_focus + Vector3(0, 30, 46)
+	camera.position = cam_pos
 	camera.look_at(cam_focus + Vector3(0, 0, -2))
 
 
