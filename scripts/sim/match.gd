@@ -25,6 +25,10 @@ const DT := 1.0 / 120.0
 const WINDUP := {"backhand": 0.4, "forehand": 0.3, "hammer": 0.45, "pull": 0.6}   # s from decision to release
 const ZONE_ROLES := ["deep", "wing_l", "wing_r", "middle", "cup", "cup", "cup"]
 const CLAMP_AFTER := 2.0       # s into a hold: the zone's cup closes in on the thrower
+const CUP_RANGE := 7.0         # m from the thrower: a zone defender this close can get a hand or foot to a throw
+const HOLE_SEARCH := 6.0       # m: against a zone, a popper or deep looks this far round their spot for a gap
+const HOLE_EVERY := 0.7        # s between looks
+const CUP_REACH := 1.1         # m: how far from a cup defender a throw's line can pass and still be blocked
 
 enum Phase { LINE_UP, PULL, PICKUP, HOLD, FLIGHT, GOAL, OVER }
 
@@ -53,7 +57,9 @@ var hold_time := 0.0
 var wind := Vector3.ZERO
 
 var tune := {"margin": 0.5, "react": REACT, "def_chance": DEF_CHANCE, "def_reach": DEF_REACH,
-		"hand_block": HAND_BLOCK, "break_penalty": 2.0, "late": -0.15, "swing": 4.0, "lean": 0.0, "goal_side": 2.5}   # the AI's knobs; ULT_TUNE (JSON) overrides them
+		"hand_block": HAND_BLOCK, "break_penalty": 2.0, "late": -0.15, "swing": 4.0, "lean": 0.0, "goal_side": 2.5,
+		"zone_swing": 2.0, "swing_margin": 0.15, "cup_block": 0.45,
+		"zone_area": 7.0, "zone_shade": 0.4, "zone_hand": 0.5}   # the AI's knobs; ULT_TUNE (JSON) overrides them
 ## Each team's defence: "person" (person to person) or "zone" (a cup of three round the thrower, a middle, two
 ## wings and a deep; common in the women's game: the PO's semifinal recording is a zone throughout). Maroon plays
 ## zone by default; ULT_DEFENCE="person,zone" (White, Maroon) overrides.
@@ -284,9 +290,23 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	release = r
 	_release(who, r, to)
 	stats.throws += 1
-	# A zone's mark stands among a cup and is beaten round the edge more often than a tight person-to-person mark:
-	# half the chance of a hand on a break (to tune against the gold-standard footage).
-	var hand := float(tune.hand_block) * (0.5 if defence[1 - offence] == "zone" else 1.0)
+	stats["throws%d" % offence] = stats.get("throws%d" % offence, 0) + 1
+	var band := "len%d_%s" % [offence, "short" if r.arrival.distance_to(who.pos) < 15.0 else
+			("medium" if r.arrival.distance_to(who.pos) < 30.0 else "long")]
+	stats[band] = stats.get(band, 0) + 1
+	stats["hold%d" % offence] = stats.get("hold%d" % offence, 0.0) + hold_time
+	if defence[1 - offence] == "zone":
+		# Against a zone the danger is throwing through the cup: a throw that passes a cup defender within reach,
+		# low enough, can be blocked; a swing round the cup is safe from it.
+		var cup := cup_blocker(who.pos, r.path)
+		if cup != null and rng.randf() < float(tune.cup_block):
+			stats.blocks += 1
+			say("%s #%d blocks it in the cup" % [names[1 - offence], cup.number])
+			_turnover(Vector3(cup.pos.x, 0, cup.pos.z), "cup block")
+			return
+	# A break past the mark: a zone's marker stands among a cup and is beaten round the edge more often than a
+	# tight person-to-person mark (tune.zone_hand of the chance).
+	var hand := float(tune.hand_block) * (float(tune.zone_hand) if defence[1 - offence] == "zone" else 1.0)
 	if breaking and rng.randf() < hand:
 		stats.blocks += 1
 		say("%s #%d gets a hand to the break throw" % [names[1 - offence], marker.number])
@@ -298,6 +318,39 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 		to.goal = _catch_spot(to, r)
 	say("%s #%d %s to #%d" % [names[offence], who.number, r.kind if r.speed < ThrowSolver.HUCK_OVER else r.kind + " huck",
 			to.number if to else 0])
+
+
+## A zone defender near the thrower (the cup, not the marker: a break past the mark is the hand block's) whom a
+## throw passes within reach of, low enough to get a hand or a foot to it
+## (path: [[time, position], ...] from the release); null if the throw goes round the cup.
+func cup_blocker(from: Vector3, path: Array) -> PlayerState:
+	for q: PlayerState in teams[1 - offence]:
+		if q.role == "mark" or q.pos.distance_to(from) > CUP_RANGE:
+			continue
+		for e in path:
+			var at: Vector3 = e[1]
+			var flat := Vector3(at.x, 0, at.z)
+			if flat.distance_to(Vector3(from.x, 0, from.z)) > CUP_RANGE + CUP_REACH:
+				break
+			if at.y < 2.4 and flat.distance_to(q.pos) < CUP_REACH:
+				return q
+	return null
+
+
+## The same test on a straight line from the thrower to a spot (the AI's quick look before choosing a throw).
+func through_cup(from: Vector3, spot: Vector3) -> bool:
+	var a := Vector3(from.x, 0, from.z)
+	var v := Vector3(spot.x, 0, spot.z) - a
+	var n := v.length()
+	if n < 0.1:
+		return false
+	for q: PlayerState in teams[1 - offence]:
+		if q.role == "mark" or q.pos.distance_to(a) > CUP_RANGE:
+			continue
+		var along := clampf((q.pos - a).dot(v / n), 0.0, minf(n, CUP_RANGE))
+		if (a + v / n * along).distance_to(q.pos) < CUP_REACH + 0.3:
+			return true
+	return false
 
 
 ## Where a runner should go to meet the disc in the air: the first point still ahead on its flight,
@@ -390,6 +443,8 @@ func _caught(p: PlayerState) -> void:
 	if Field.in_attacking_endzone(p.pos, dir[offence]):
 		score[offence] += 1
 		stats.goals += 1
+		stats["goals%d" % offence] = stats.get("goals%d" % offence, 0) + 1
+		_end_possession()
 		say("GOAL %s #%d (from #%d).  %s %d, %s %d" % [names[offence], p.number, thrower.number,
 				names[0], score[0], names[1], score[1]])
 		holder = p
@@ -405,9 +460,8 @@ func _defended(p: PlayerState) -> void:
 	var spot := Field.clamp_restart(Vector3(p.pos.x, 0, p.pos.z), dir[1 - offence])
 	if rng.randf() < 0.4 and Field.in_bounds(p.pos):
 		say("%s #%d intercepts" % [names[1 - offence], p.number])
+		_count_turnover("interception")
 		offence = 1 - offence
-		stats.turnovers += 1
-		stats["t_interception"] = stats.get("t_interception", 0) + 1
 		_take(p)
 		_pick_human()
 	else:
@@ -432,11 +486,22 @@ func _grounded(prev: Vector3) -> void:
 		_turnover(spot, "dropped" if _near_any(offence, spot, 2.0) else "on the ground")
 
 
-func _turnover(spot: Vector3, why: String) -> void:
+## Turnovers, counted by cause, overall and for the team losing the disc (tN_cause); each ends a possession.
+func _count_turnover(cause: String) -> void:
 	stats.turnovers += 1
 	stats["t_team%d" % offence] = stats.get("t_team%d" % offence, 0) + 1
-	var cause := why.get_slice(" ", 0) if not why.begins_with("#") else "drop"
 	stats["t_" + cause] = stats.get("t_" + cause, 0) + 1
+	stats["t%d_%s" % [offence, cause]] = stats.get("t%d_%s" % [offence, cause], 0) + 1
+	_end_possession()
+
+
+func _end_possession() -> void:
+	var k := "poss%d" % offence
+	stats[k] = stats.get(k, 0) + 1
+
+
+func _turnover(spot: Vector3, why: String) -> void:
+	_count_turnover(why.get_slice(" ", 0) if not why.begins_with("#") else "drop")
 	offence = 1 - offence
 	spot = Field.clamp_restart(spot, dir[offence])
 	say("Turnover (%s): %s's disc" % [why, names[offence]])
@@ -548,6 +613,7 @@ func _ai_throw() -> void:
 	if hold_time < 1.0:
 		return
 	var d: int = dir[offence]
+	var zone := defence[1 - offence] == "zone"
 	# The wind-up: everyone runs for this long before the disc flies (the backhand's and forehand's, averaged).
 	var w := 0.5 * (float(WINDUP.backhand) + float(WINDUP.forehand))
 	var best: PlayerState = null
@@ -586,7 +652,8 @@ func _ai_throw() -> void:
 					continue
 				d_t = minf(d_t, maxf(q.pos.distance_to(spot) - tune.def_reach, 0.0) / (q.speed * 0.85) + 0.25)
 			var margin := d_t - maxf(t, r_t)
-			if margin > safe_margin and not is_break(holder.pos, spot):
+			var blocked := is_break(holder.pos, spot) or (zone and through_cup(holder.pos, spot))
+			if margin > safe_margin and not blocked:
 				safe_margin = margin
 				safe = p
 				safe_spot = spot
@@ -594,8 +661,8 @@ func _ai_throw() -> void:
 				continue                                      # they would not get there in time
 			var progress := (spot.x - holder.pos.x) * d
 			var sc := clampf(margin, -2.0, 2.0) * 3.0 + 0.06 * progress - (1.0 if dist > 40.0 else 0.0)
-			if is_break(holder.pos, spot):
-				sc -= float(tune.break_penalty)               # throw to the open side if you can
+			if blocked:
+				sc -= float(tune.break_penalty)               # throw to the open side (round the cup) if you can
 			if Field.in_attacking_endzone(spot, d):
 				sc += 2.0
 			if sc > best_score:
@@ -603,13 +670,19 @@ func _ai_throw() -> void:
 				best = p
 				best_margin = margin
 				best_spot = spot
-	if stall >= float(tune.swing) and (best == null or best_margin < tune.margin) and safe != null:
-		best = safe                                            # swing it: the dump, the safest look
+	# Swing it (the dump, the safest look) when nothing better is on: from stall 4 against a person defence, sooner
+	# against a zone, which is beaten by moving the disc side to side.
+	var swing_at := float(tune.zone_swing) if zone else float(tune.swing)
+	var swinging := false
+	if stall >= swing_at and (best == null or best_margin < tune.margin) and safe != null \
+			and safe_margin >= float(tune.swing_margin):
+		best = safe
 		best_spot = safe_spot
 		best_margin = safe_margin
+		swinging = true
 	if best == null:
 		return
-	if best_margin < tune.margin and stall < 8.0:
+	if best_margin < tune.margin and stall < 8.0 and not swinging:
 		return
 	var right := Vector3(d, 0, 0).cross(Vector3.UP)
 	var side := (best_spot - holder.pos).dot(right)
@@ -688,14 +761,16 @@ func _defend(p: PlayerState) -> void:
 ## Zone defence: each defender holds a spot set by where the disc is, not by an attacker. The cup (the mark and
 ## two beside and a little ahead of the thrower, taking away the middle), a middle 9 m downfield, two wings 12 m
 ## downfield shading to the disc's side, and a deep about 26 m downfield. After CLAMP_AFTER s of a hold the cup
-## closes in ("clamping"). In the air, a defender near where the disc comes down goes for it; the others reset
+## closes in ("clamping"). In the air, a defender who can get to where the disc comes down in time goes for it; the others reset
 ## round where it will land, after the reaction time.
 func _zone(p: PlayerState) -> void:
 	var d: int = dir[offence]
 	var base := holder.pos if holder != null else Vector3(disc.pos.x, 0, disc.pos.z)
 	if phase == Phase.FLIGHT and release != null:
 		var land := Vector3(release.arrival.x, 0, release.arrival.z)
-		if p.pos.distance_to(land) < 7.0 and disc.time > tune.react * 0.5:
+		var left: float = release.path[-1][0] - disc.time if release.path.size() > 0 else 0.0
+		var reach_t := maxf(p.pos.distance_to(land) - tune.def_reach, 0.0) / p.speed
+		if (p.pos.distance_to(land) < 7.0 or reach_t < left + 0.3) and disc.time > tune.react * 0.5:
 			p.goal = _catch_spot(p, release)
 			p.sprint = true
 			return
@@ -729,6 +804,19 @@ func zone_spot(p: PlayerState, base: Vector3, d: int) -> Vector3:
 		"deep":
 			spot = base + Vector3(d * 26.0, 0, 0)
 			spot.z = shade * 0.3
+	# Behind the cup, a zone is not empty space: each defender closes on the attacker in their area (the most
+	# downfield one within tune.zone_area m), standing goal-side of them, part of the way (tune.zone_shade: 0 holds
+	# the spot, 1 marks them).
+	if p.zone_role != "cup":
+		var threat: PlayerState = null
+		for a: PlayerState in teams[1 - p.team]:
+			if a == holder or a.pos.distance_to(spot) > float(tune.zone_area):
+				continue
+			if threat == null or a.pos.x * d > threat.pos.x * d:
+				threat = a
+		if threat != null:
+			var guard := threat.pos + Vector3(d * 1.5, 0, 0) + (base - threat.pos).normalized() * 1.0
+			spot = spot.lerp(guard, float(tune.zone_shade))
 	# Inside the field, and no deeper than the back of the attacked end zone.
 	var back := Field.HALF_L - 1.5
 	spot.x = clampf(spot.x, -back, back)
@@ -746,7 +834,13 @@ func _offence_goal(p: PlayerState, dt: float) -> void:
 		base = Vector3(release.arrival.x, 0, release.arrival.z)
 	p.timer -= dt
 	if defence[1 - offence] == "zone" and p.role in ["stack", "cut", "clear"]:
-		p.goal = _zone_offence_spot(p, base, d)
+		# Handlers hold the swing line; the others look for the holes every HOLE_EVERY s.
+		var spot := _zone_offence_spot(p, base, d)
+		if _is_zone_handler(p):
+			p.goal = spot
+		elif p.timer <= 0.0 or phase == Phase.FLIGHT:
+			p.goal = _hole_near(spot, d)
+			p.timer = HOLE_EVERY
 		return
 	match p.role:
 		"stack":
@@ -773,8 +867,8 @@ func _offence_goal(p: PlayerState, dt: float) -> void:
 
 
 ## Against a zone: spread the field and move the disc. Two handlers level with the thrower across the field
-## (with the thrower, a line to swing along); two poppers in the holes behind the cup, stepping towards the
-## thrower in turn; two deep, wide, to stretch the wings and the deep.
+## (with the thrower, a line to swing along, losing no ground); two poppers in the seams between the cup and the
+## wings, stepping up in turn; two deep in the seams between the wings and the deep.
 func _zone_offence_spot(p: PlayerState, base: Vector3, d: int) -> Vector3:
 	var others: Array = []
 	for q: PlayerState in teams[offence]:
@@ -787,22 +881,54 @@ func _zone_offence_spot(p: PlayerState, base: Vector3, d: int) -> Vector3:
 		0, 1:
 			# Handlers: 9 m either side of the thrower and a step back; near a sideline, both to the open side
 			# (9 and 17 m away).
-			var offs := [-9.0, 9.0]
-			if base.z + 9.0 > Field.HALF_W - 2.0:
-				offs = [-9.0, -17.0]
-			elif base.z - 9.0 < -Field.HALF_W + 2.0:
-				offs = [9.0, 17.0]
-			spot = Vector3(base.x - d * 1.5, 0, base.z + float(offs[k]))
+			var offs := [-10.0, 10.0]
+			if base.z + 10.0 > Field.HALF_W - 2.0:
+				offs = [-10.0, -18.0]
+			elif base.z - 10.0 < -Field.HALF_W + 2.0:
+				offs = [10.0, 18.0]
+			spot = Vector3(base.x - d * 0.5, 0, base.z + float(offs[k]))
 		2, 3:
 			var side := -1.0 if k == 2 else 1.0
-			spot = base + Vector3(d * (5.0 if pop else 8.5), 0, side * 4.5)
+			spot = base + Vector3(d * (5.5 if pop else 7.5), 0, side * 6.5)
 		_:
 			var side := -1.0 if k == 4 else 1.0
-			spot = Vector3(base.x + d * 22.0, 0, side * 9.0)
+			spot = Vector3(base.x + d * 19.0, 0, clampf(base.z * 0.3, -6.0, 6.0) + side * 7.0)
 	var back := Field.HALF_L - 1.5
 	spot.x = clampf(spot.x, -back, back)
 	spot.z = clampf(spot.z, -Field.HALF_W + 1.5, Field.HALF_W - 1.5)
 	return spot
+
+
+## Against a zone, the first two team-mates (by number order, the holder aside) are the handlers.
+func _is_zone_handler(p: PlayerState) -> bool:
+	var k := 0
+	for q: PlayerState in teams[offence]:
+		if q == p:
+			return k < 2
+		if q != holder:
+			k += 1
+	return false
+
+
+## The biggest gap in the defence near a spot: candidates up to HOLE_SEARCH m away, scored by the distance to the
+## nearest defender, less a little for straying from the spot.
+func _hole_near(spot: Vector3, d: int) -> Vector3:
+	var best := spot
+	var best_score := -1e9
+	var steps := 4
+	for i in range(-steps, steps + 1):
+		for j in range(-steps, steps + 1):
+			var c := spot + Vector3(i, 0, j) * (HOLE_SEARCH / steps)
+			if absf(c.z) > Field.HALF_W - 1.5 or absf(c.x) > Field.HALF_L - 1.5:
+				continue
+			var near := 1e9
+			for q: PlayerState in teams[1 - offence]:
+				near = minf(near, q.pos.distance_to(c))
+			var sc := minf(near, 8.0) - 0.2 * c.distance_to(spot) + 0.05 * (c.x - spot.x) * d
+			if sc > best_score:
+				best_score = sc
+				best = c
+	return best
 
 
 func _stack_spot(p: PlayerState, base: Vector3, d: int) -> Vector3:
