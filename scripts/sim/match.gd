@@ -699,6 +699,9 @@ func _count_turnover(cause: String) -> void:
 	stats["t_team%d" % offence] = stats.get("t_team%d" % offence, 0) + 1
 	stats["t_" + cause] = stats.get("t_" + cause, 0) + 1
 	stats["t%d_%s" % [offence, cause]] = stats.get("t%d_%s" % [offence, cause], 0) + 1
+	if release != null and phase in [Phase.FLIGHT, Phase.HOLD] and cause != "stall":
+		# By the throw just made (after_<kind>_<cause>: which throws are turned over, and how).
+		stats["after_%s_%s" % [release.kind, cause]] = stats.get("after_%s_%s" % [release.kind, cause], 0) + 1
 	_end_possession()
 
 
