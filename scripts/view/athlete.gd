@@ -36,6 +36,9 @@ var skeleton: Skeleton3D
 var anim: AnimationPlayer
 var tree: AnimationTree
 var yaw := 0.0
+var foot_lock: FootLock
+var toes_final: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   # the toes where they are drawn (after foot locking)
+var _toes: Array = []
 var hand_bone := -1
 var number_back: Label3D
 var throwing := ""              # the throw clip last started
@@ -61,6 +64,11 @@ func setup(variant: String, kit: Dictionary, number: int) -> void:
 	hand_bone = skeleton.find_bone("RightHand")
 	_tint(kit, variant)
 	_build_tree(variant)
+	foot_lock = FootLock.new()
+	skeleton.add_child(foot_lock)
+	foot_lock.setup(skeleton, self)
+	_toes = [skeleton.find_bone("LeftToeBase"), skeleton.find_bone("RightToeBase")]
+	skeleton.skeleton_updated.connect(_on_skeleton_updated)
 	_add_numbers(number, kit)
 
 
@@ -235,3 +243,9 @@ func hand_position() -> Vector3:
 
 func blend_position() -> Vector2:
 	return tree.get("parameters/loco/blend_position")
+
+
+## After the skeleton's modifiers (the foot lock's IK): where the toes are drawn.
+func _on_skeleton_updated() -> void:
+	for k in 2:
+		toes_final[k] = skeleton.global_transform * skeleton.get_bone_global_pose(_toes[k]).origin
