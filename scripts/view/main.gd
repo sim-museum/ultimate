@@ -45,6 +45,7 @@ var bodies: Array = [[], []]       # Athlete per player
 var subs: Array = []               # Athlete per substitute
 var observers: Array = []          # [Athlete, PlayerState] per sideline: they walk level with the disc
 var windups_drawn := 0             # wind-ups (throws and pulls) the athletes have animated
+var catch_drawn := -1               # the throw (sim.stats.throws) whose catch clip has been started
 var tags: Array = [[], []]         # Label3D per player
 var rings: Array = [[], []]        # the ring under each player (holder, receiver, human)
 var disc_node: MeshInstance3D
@@ -410,6 +411,11 @@ func _update_players(delta: float) -> void:
 	if sim.windups != windups_drawn and sim.windup_by != null:
 		(bodies[sim.windup_by.team][sim.windup_by.idx] as Athlete).start_throw(sim.windup_kind, _release_in())
 	windups_drawn = sim.windups
+	# The receiver's catch: started as the disc comes within the clip's lead-in, once a throw.
+	var cl := Athlete.catch_lead(sim)
+	if cl >= 0.0 and catch_drawn != sim.stats.throws:
+		catch_drawn = sim.stats.throws
+		(bodies[sim.receiver.team][sim.receiver.idx] as Athlete).start_catch(cl)
 	for ob in observers:
 		var st: PlayerState = ob[1]
 		var level := clampf(sim.disc.pos.x, -Field.HALF_L + 4.0, Field.HALF_L - 4.0)

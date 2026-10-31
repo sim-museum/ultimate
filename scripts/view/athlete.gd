@@ -53,6 +53,8 @@ var throwing := ""              # the throw clip last started
 var throw_clock := 0.0          # where that clip is now (s)
 var _run_speed := 1.0           # the fastest forward clip's own speed
 var stance := 0.0               # how far into the mark's stance (0-1)
+var catching := 0.0             # s since the catch clip started (large: none)
+var _has_catch := false
 var _has_stance := false
 
 
@@ -165,7 +167,32 @@ func _build_tree(variant: String) -> void:
 		_has_stance = true
 	bt.connect_node("throw", 0, under)
 	bt.connect_node("throw", 1, "seek")
-	bt.connect_node("output", 0, "throw")
+	# The catch (a keyed clip) on the upper body only, over everything else: the legs keep running.
+	var catch_name := _anim_name(lib_names, "catch")
+	if catch_name != "":
+		var c_anim := AnimationNodeAnimation.new()
+		c_anim.animation = catch_name
+		bt.add_node("catch_anim", c_anim)
+		var c_seek := AnimationNodeTimeSeek.new()
+		bt.add_node("catch_seek", c_seek)
+		bt.connect_node("catch_seek", 0, "catch_anim")
+		var c_shot := AnimationNodeOneShot.new()
+		c_shot.fadein_time = 0.06
+		c_shot.fadeout_time = 0.25
+		c_shot.filter_enabled = true
+		var sk_path := String(model.get_path_to(skeleton))
+		for i in skeleton.get_bone_count():
+			var bn := skeleton.get_bone_name(i)
+			if bn in ["LowerBack", "Spine", "Spine1", "Neck", "Neck1", "Head"] or bn.contains("Shoulder") \
+					or bn.contains("Arm") or bn.contains("Hand") or bn.contains("Finger") or bn.contains("Thumb"):
+				c_shot.set_filter_path(NodePath(sk_path + ":" + bn), true)
+		bt.add_node("catch", c_shot)
+		bt.connect_node("catch", 0, "throw")
+		bt.connect_node("catch", 1, "catch_seek")
+		bt.connect_node("output", 0, "catch")
+		_has_catch = true
+	else:
+		bt.connect_node("output", 0, "throw")
 	tree = AnimationTree.new()
 	tree.tree_root = bt
 	model.add_child(tree)
@@ -212,6 +239,7 @@ func _add_numbers(number: int, kit: Dictionary) -> void:
 ## Each frame: place the athlete at the player, turn towards the heading, and blend the clips by velocity.
 func update_from(p: PlayerState, look: Vector3, dt: float) -> void:
 	throw_clock += dt
+	catching += dt
 	position = Vector3(p.pos.x, 0.0, p.pos.z)
 	var v := Vector3(p.vel.x, 0.0, p.vel.z)
 	var speed := v.length()
@@ -261,6 +289,32 @@ func start_throw(kind: String, lead: float) -> void:
 	tree.set("parameters/throw/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 	throwing = clip
 	throw_clock = maxf(0.0, float(rel) - lead)
+
+
+## A catch: the disc reaches her hands `lead` seconds from now; the clip starts where its own catch moment is
+## `lead` ahead.
+func start_catch(lead: float) -> void:
+	if not _has_catch:
+		return
+	var rel: float = float(clips()["clips"]["catch"]["release"])
+	tree.set("parameters/catch_seek/seek_request", maxf(0.0, rel - lead))
+	tree.set("parameters/catch/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+	catching = 0.0
+
+
+## When the receiver of the disc in flight should start her catch (the view, each frame): the seconds until the
+## disc reaches her (within the catch clip's lead-in), or -1.
+static func catch_lead(sim: UltimateMatch) -> float:
+	if sim.phase != UltimateMatch.Phase.FLIGHT or sim.receiver == null or sim.disc.time < 0.1:
+		return -1.0
+	var r: PlayerState = sim.receiver
+	var to := Vector3(r.pos.x - sim.disc.pos.x, 0, r.pos.z - sim.disc.pos.z)
+	var v := Vector3(sim.disc.vel.x, 0, sim.disc.vel.z)
+	var closing := v.dot(to.normalized()) if to.length() > 0.01 else v.length()
+	if closing < 1.0:
+		return -1.0
+	var t := maxf(to.length() - UltimateMatch.REACH, 0.0) / closing
+	return t if t < 0.25 else -1.0
 
 
 ## The disc has already gone (no wind-up seen): play the clip from just before its release.

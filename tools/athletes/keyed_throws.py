@@ -87,6 +87,23 @@ MARK = {
 }
 STANCES = {"mark": MARK}
 
+# The catch (ULTIMATE-2): two hands, the pancake: both hands reach forward to meet the disc at chest height, close
+# on it (the "release" here is the catch), and pull it in. Played on the upper body only, over the run.
+CATCH = {
+    "release": 0.25,
+    "keys": [
+        (0.00, {}),
+        (0.15, {"spine": {"twist": 0.0, "bend": 6.0, "side": 0.0},
+                "rhand": (0.14, 0.42, 1.48), "relbow": (0.6, -0.2, -0.8),
+                "lhand": (-0.14, 0.42, 1.48), "lelbow": (-0.6, -0.2, -0.8)}),
+        (0.25, {"rhand": (0.05, 0.40, 1.40), "lhand": (-0.05, 0.40, 1.40)}),
+        (0.45, {"spine": {"bend": 3.0}, "rhand": (0.10, 0.26, 1.25), "lhand": (-0.10, 0.26, 1.25)}),
+        (0.75, {"spine": {"twist": 0.0, "bend": 0.0, "side": 0.0}, "rhand": "idle", "lhand": "idle",
+                "relbow": None, "lelbow": None}),
+    ],
+}
+THROWS["catch"] = CATCH
+
 
 def B(r, f, u):
     """Body frame (right, forward, up) to armature space (+X left, -Y forward, +Z up)."""
