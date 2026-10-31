@@ -58,14 +58,14 @@ You play White.
   - against a zone the offence swings the disc along a line of handlers and looks for the holes;
   - players chase the disc, and catch, block or lay out for it.
 
-- **The players:** women athletes with skeletons, in jerseys and shorts tinted to the team (White and
-  Maroon), some with dark undershirt sleeves, knee sleeves or headbands, with numbers on their backs. Two
-  observers in orange keep level with the play on the sidelines. Substitutes watch from the far sideline,
-  in front of the boards, tents and a full stand. The White team is mostly East Asian
-  players, the Maroon team mixed. They run, jog, backpedal, shuffle sideways and idle from motion capture, with their planted feet held
-  still by foot locking, blended by each player's speed
-  and direction, face the way they run or the disc, and carry the disc in the throwing hand. Each throw winds
-  up before the disc leaves the hand: two captured backhands, and a forehand and a hammer keyed by hand.
+- **The players:** women athletes with skeletons, in jerseys and shorts tinted to the team (White and Maroon),
+  some with dark undershirt sleeves, knee sleeves or headbands, with numbers on their backs. Two observers in
+  orange keep level with the play on the sidelines. Substitutes watch from the far sideline, in front of the
+  boards, tents and a full stand. The White team is mostly East Asian players, the Maroon team mixed. They run,
+  jog, backpedal, shuffle sideways and idle from motion capture, with their planted feet held still by foot
+  locking, blended by each player's speed and direction, face the way they run or the disc, and carry the disc in
+  the throwing hand. Each throw winds up before the disc leaves the hand: two captured backhands, and a forehand
+  and a hammer keyed by hand.
 
 ## Layout
 
