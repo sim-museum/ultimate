@@ -29,6 +29,8 @@ You play White.
 - `C` switches the camera: the whole field from high up; a tower behind the sideline (high and wide); a lower,
   tighter camera on the sideline that follows the disc; or behind the play at head height.
 - `F1` toggles autoplay. `Esc` quits.
+- `godot --path . -- --wind=6,90` plays in a 6 m/s wind blowing across the field (degrees: 0 along it). The wind
+  gusts; throwers allow for its steady part.
 
 ## What's in it
 

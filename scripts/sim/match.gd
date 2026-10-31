@@ -26,6 +26,8 @@ const COUNT_RANGE := 3.0       # m: the marker counts only within this distance
 const DT := 1.0 / 120.0
 const WINDUP := {"backhand": 0.4, "forehand": 0.3, "hammer": 0.45, "pull": 0.6, "high_backhand": 0.45,
 		"high_forehand": 0.35, "cloud": 0.45, "blade": 0.4, "scoober": 0.4, "push": 0.25}   # s from decision to release
+const GUST := 0.35             # gusts: up to this share of the steady wind, either way
+const WIND_RISK := 0.25        # the AI's score cost per (m/s of wind x s in the air): floaty throws in wind are risky
 const HIGH_RELEASE := 0.4      # a high release over the mark: this share of the marker's chance of a hand on a break
 const CLOUD_RANGE := 15.0      # m: against a zone, a short throw whose line runs through the cup goes over it
 const ZONE_ROLES := ["deep", "wing_l", "wing_r", "middle", "cup", "cup", "cup"]
@@ -59,7 +61,9 @@ var last_in := Vector3.ZERO    # the disc's last in-bounds spot over the ground 
 var stall := 0.0
 var stall_called := 0
 var hold_time := 0.0
-var wind := Vector3.ZERO
+var wind := Vector3.ZERO           # the wind now (the steady wind with its gusts), m/s
+var wind_base := Vector3.ZERO      # the steady wind (ULT_WIND="speed,direction degrees"; 0 = towards +x): the
+                                   # throwers allow for it; the gusts (GUST of it, changing over seconds) they cannot
 
 var tune := {"margin": 0.5, "react": REACT, "def_chance": DEF_CHANCE, "def_reach": DEF_REACH,
 		"hand_block": HAND_BLOCK, "break_penalty": 2.0, "late": -0.15, "swing": 4.0, "lean": 0.0, "goal_side": 2.5,
@@ -89,6 +93,10 @@ func _init(seed_value: int = 1, human_side: int = 0) -> void:
 		if extra is Dictionary:
 			for k in extra:
 				tune[k] = float(extra[k])
+	var env_w := OS.get_environment("ULT_WIND")
+	if env_w != "":
+		var wp := env_w.split(",")
+		set_wind(float(wp[0]), float(wp[1]) if wp.size() > 1 else 0.0)
 	var env_d := OS.get_environment("ULT_DEFENCE")
 	if env_d != "":
 		var parts := env_d.split(",")
@@ -101,6 +109,13 @@ func _init(seed_value: int = 1, human_side: int = 0) -> void:
 			p.speed = PlayerState.SPRINT * rng.randf_range(0.93, 1.0)
 			teams[t].append(p)
 	start_point(1)                              # Maroon pulls first (the toss)
+
+
+## A steady wind of `speed` m/s blowing towards `deg` degrees (0: towards +x, 90: towards +z).
+func set_wind(speed: float, deg: float) -> void:
+	wind_base = Vector3(cos(deg_to_rad(deg)), 0, sin(deg_to_rad(deg))) * speed
+	wind = wind_base
+	ThrowSolver.wind = wind_base
 
 
 func say(text: String) -> void:
@@ -188,6 +203,11 @@ func step(dt: float = DT) -> void:
 	if phase == Phase.OVER:
 		return
 	clock += dt
+	if wind_base != Vector3.ZERO:
+		# Gusts: the strength wanders over a few seconds, and the direction a little.
+		var g := 1.0 + GUST * (0.6 * sin(clock * 0.53) + 0.4 * sin(clock * 1.71 + 1.3))
+		wind = wind_base.rotated(Vector3.UP, 0.15 * sin(clock * 0.31)) * g
+	ThrowSolver.wind = wind_base
 	phase_time += dt
 	match phase:
 		Phase.LINE_UP:
@@ -229,7 +249,7 @@ func _throw_pull() -> void:
 	var far := Field.GOAL_LINE - (19.0 if DiscFlight.rigid else 6.0)
 	var target := Vector3(d * rng.randf_range(near, far), 0.0, rng.randf_range(-9.0, 9.0))
 	release = ThrowSolver.solve(puller.pos, target, "pull", false, false)
-	release.path = DiscFlight.simulate(release.state, ThrowSolver.SOLVE_DT, 0.0)
+	release.path = DiscFlight.simulate(release.state, ThrowSolver.SOLVE_DT, 0.0, 12.0, wind)
 	release.arrival = release.path[-1][1]
 	_release(puller, release, null)
 	is_pull = true
@@ -303,7 +323,7 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	var s := r.state
 	s.turn(yaw_err)
 	s.vel *= speed_err
-	r.path = DiscFlight.simulate(s, ThrowSolver.SOLVE_DT, 0.0)       # all the way down: runners chase it
+	r.path = DiscFlight.simulate(s, ThrowSolver.SOLVE_DT, 0.0, 12.0, wind)   # all the way down, in the wind now
 	r.arrival = r.path[-1][1]
 	var who := holder
 	release = r
@@ -699,7 +719,8 @@ func _ai_throw() -> void:
 			if r_t > t + float(tune.late):
 				continue                                      # they would not get there in time
 			var progress := (spot.x - holder.pos.x) * d
-			var sc := clampf(margin, -2.0, 2.0) * 3.0 + 0.06 * progress - (1.0 if dist > 40.0 else 0.0)
+			var wind_cost := WIND_RISK * wind_base.length() * maxf(t - w, 0.0)     # floaty throws in wind
+			var sc := clampf(margin, -2.0, 2.0) * 3.0 + 0.06 * progress - (1.0 if dist > 40.0 else 0.0) - wind_cost
 			if blocked:
 				# Throw to the open side (round the cup) if you can; a high release over the mark halves the cost.
 				sc -= float(tune.break_penalty) * (0.5 if cand_kind == "high" else 1.0)

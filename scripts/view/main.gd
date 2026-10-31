@@ -7,7 +7,7 @@ extends Node3D
 ## switches to the player nearest the disc. C: the next camera (field, tower, sideline, behind). F1: autoplay (both
 ## teams AI). Esc: quit.
 ##
-## Command line (after --): --autoplay, --seed=N, --screenshot=path.png [--frames=N], --cam=field|tower|sideline|close
+## Command line (after --): --autoplay, --seed=N, --wind=speed[,degrees], --screenshot=path.png [--frames=N], --cam=field|tower|sideline|close
 
 ## The kits: White (navy shorts and undershirts, navy numbers) and Maroon (black shorts and undershirts, white numbers).
 const KITS := [
@@ -43,7 +43,8 @@ var hud: Label
 var help: Label
 var log_label: Label
 var kind := "backhand"
-var high := false                  # backhands and forehands released high, over the mark
+var high := false
+var wind_arg := ""                 # --wind=speed[,direction degrees]                  # backhands and forehands released high, over the mark
 var shot_path := ""
 var shot_frames := 240
 var frames := 0
@@ -61,6 +62,8 @@ func _ready() -> void:
 			autoplay = true
 		elif a.begins_with("--seed="):
 			seed_value = int(a.split("=")[1])
+		elif a.begins_with("--wind="):
+			wind_arg = a.get_slice("=", 1)
 		elif a.begins_with("--screenshot="):
 			shot_path = a.split("=")[1]
 		elif a.begins_with("--frames="):
@@ -69,6 +72,9 @@ func _ready() -> void:
 			var c := a.split("=")[1]
 			cam_mode = 3 if c == "close" else maxi(0, CAMERAS.find(c))
 	sim = UltimateMatch.new(seed_value, -1 if autoplay else 0)
+	if wind_arg != "":
+		var wp := wind_arg.split(",")
+		sim.set_wind(float(wp[0]), float(wp[1]) if wp.size() > 1 else 90.0)
 	_build_world()
 	_build_field()
 	var stadium := Stadium.new()
@@ -457,6 +463,8 @@ func _update_hud() -> void:
 	var mode := "autoplay" if sim.human_team < 0 else ("you throw: " + ("high " if high and kind in ["backhand", "forehand"] else "") + kind if sim.offence == 0 else "you defend")
 	var call: String = sim.defence[0] + (" (next point: %s)" % sim.defence_call[0] if sim.defence_call[0] != "" else "")
 	mode += "        your defence: " + call
+	if sim.wind_base != Vector3.ZERO:
+		mode += "        wind %.0f m/s" % sim.wind.length()
 	hud.text = "%s %d  –  %d %s        %s on offence %s%s\n%s" % [sim.names[0], sim.score[0], sim.score[1],
 			sim.names[1], who, arrow, stall_txt, mode]
 	var lines: Array = []

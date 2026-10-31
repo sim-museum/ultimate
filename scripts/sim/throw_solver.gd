@@ -117,8 +117,12 @@ static func release_state(thrower_pos: Vector3, heading: Vector3, kind: String, 
 	return st
 
 
+## The wind the thrower allows for (the match's steady wind; its gusts are not foreseen).
+static var wind := Vector3.ZERO
+
+
 static func _fly(s: DiscFlight.State, to_ground: bool = false) -> Array:
-	return DiscFlight.simulate(s, SOLVE_DT, 0.0 if to_ground else CATCH_HEIGHT)
+	return DiscFlight.simulate(s, SOLVE_DT, 0.0 if to_ground else CATCH_HEIGHT, 12.0, wind)
 
 
 ## Where a flight first gets `dist` along `heading` from the thrower: [time, position], or [] if it never does.
