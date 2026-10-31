@@ -24,7 +24,7 @@ You play White.
   - Hold `Shift` for inside-out, hold `Space` to huck.
   - The marker counts to ten.
 - **On defence:** `WASD` or the arrow keys steer the highlighted player. `Tab` switches to the player
-  nearest the disc.
+  nearest the disc. `Z` calls your team's defence, zone or person to person, from the next pull.
 - `C` switches the camera: the whole field from high up; a tower behind the sideline (high and wide); a lower,
   tighter camera on the sideline that follows the disc; or behind the play at head height.
 - `F1` toggles autoplay. `Esc` quits.
@@ -46,7 +46,9 @@ You play White.
 - **The AI:**
   - offence runs a vertical stack with cuts under and deep;
   - the thrower picks the receiver who wins the race to the disc;
-  - defence is person to person, with a reaction lag;
+  - defence is person to person, with a reaction lag, or a zone: a cup of three round the thrower, a middle,
+    two wings and a deep, sliding with the disc and closing on attackers in their area (Maroon plays zone);
+  - against a zone the offence swings the disc along a line of handlers and looks for the holes;
   - players chase the disc, and catch, block or lay out for it.
 
 - **The players:** women athletes with skeletons, in jerseys and shorts tinted to the team (White and

@@ -64,6 +64,7 @@ var tune := {"margin": 0.5, "react": REACT, "def_chance": DEF_CHANCE, "def_reach
 ## wings and a deep; common in the women's game: the PO's semifinal recording is a zone throughout). Maroon plays
 ## zone by default; ULT_DEFENCE="person,zone" (White, Maroon) overrides.
 var defence: Array[String] = ["person", "zone"]
+var defence_call: Array[String] = ["", ""]       # a defence called for the next point (call_defence)
 var pending: ThrowSolver.Release                # a throw being wound up (released when windup_left runs out)
 var pending_to: PlayerState
 var windup_left := 0.0
@@ -103,6 +104,12 @@ func say(text: String) -> void:
 		events.pop_front()
 
 
+## A team calls its defence ("person" or "zone"), as teams do on the line: it applies from the next pull.
+func call_defence(t: int, kind: String) -> void:
+	defence_call[t] = kind
+	say("%s will play %s defence from the next pull" % [names[t], "zone" if kind == "zone" else "person-to-person"])
+
+
 func pulling_team() -> int:
 	return 1 - offence
 
@@ -112,6 +119,10 @@ func pulling_team() -> int:
 ## Both lines on their goal lines: the pulling team on the line of the end zone it defends.
 func start_point(puller: int) -> void:
 	offence = 1 - puller
+	for t in 2:
+		if defence_call[t] != "":
+			defence[t] = defence_call[t]
+			defence_call[t] = ""
 	holder = null
 	receiver = null
 	thrower = null
@@ -432,6 +443,9 @@ func _caught(p: PlayerState) -> void:
 		_turnover(Field.restart_point(Vector3(disc.pos.x, 0, disc.pos.z)), "#%d drops it" % p.number)
 		return
 	stats.catches += 1
+	if not is_pull:
+		stats["air%d" % offence] = stats.get("air%d" % offence, 0.0) + disc.time      # a completed throw's time in the air
+		stats["airn%d" % offence] = stats.get("airn%d" % offence, 0) + 1
 	if not Field.in_bounds(p.pos):
 		_turnover(Field.restart_point(p.pos), "caught out of bounds")
 		return

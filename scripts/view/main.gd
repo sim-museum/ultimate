@@ -96,6 +96,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				kind = "hammer"
 			KEY_TAB:
 				sim.switch_human()
+			KEY_Z:
+				var now: String = sim.defence_call[0] if sim.defence_call[0] != "" else sim.defence[0]
+				sim.call_defence(0, "person" if now == "zone" else "zone")
 			KEY_C:
 				cam_mode = (cam_mode + 1) % CAMERAS.size()
 			KEY_F1:
@@ -298,7 +301,7 @@ func _build_hud() -> void:
 	help.add_theme_font_size_override("font_size", 16)
 	help.add_theme_color_override("font_outline_color", Color.BLACK)
 	help.add_theme_constant_override("outline_size", 5)
-	help.text = "Offence: click to throw  ·  1 backhand  2 forehand  3 hammer  ·  Shift inside-out  ·  Space huck     Defence: WASD / arrows  ·  Tab switch     C camera  ·  F1 autoplay  ·  Esc quit"
+	help.text = "Offence: click to throw  ·  1 backhand  2 forehand  3 hammer  ·  Shift inside-out  ·  Space huck     Defence: WASD / arrows  ·  Tab switch  ·  Z zone or person     C camera  ·  F1 autoplay  ·  Esc quit"
 	layer.add_child(help)
 
 
@@ -403,6 +406,8 @@ func _update_hud() -> void:
 	var who: String = sim.names[sim.offence]
 	var arrow := "→" if sim.dir[sim.offence] > 0 else "←"
 	var mode := "autoplay" if sim.human_team < 0 else ("you throw: " + kind if sim.offence == 0 else "you defend")
+	var call: String = sim.defence[0] + (" (next point: %s)" % sim.defence_call[0] if sim.defence_call[0] != "" else "")
+	mode += "        your defence: " + call
 	hud.text = "%s %d  –  %d %s        %s on offence %s%s\n%s" % [sim.names[0], sim.score[0], sim.score[1],
 			sim.names[1], who, arrow, stall_txt, mode]
 	var lines: Array = []
