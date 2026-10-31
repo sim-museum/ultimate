@@ -41,7 +41,10 @@ var anim: AnimationPlayer
 var tree: AnimationTree
 var yaw := 0.0
 var foot_lock: FootLock
+var composure: Composure        # nerves in the body (ULTIMATE-6)
 var toes_final: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   # the toes where they are drawn (after foot locking)
+var shoulders_final := 0.0      # the arms' roots' mean height as drawn (after the composure modifier)
+var head_final := Vector3.ZERO  # the head's top as drawn, in the athlete's own frame
 var _toes: Array = []
 var hand_bone := -1
 var off_hand_bone := -1         # the left hand: it holds the disc through a lefty forehand
@@ -72,6 +75,8 @@ func setup(variant: String, kit: Dictionary, number: int) -> void:
 	off_hand_bone = skeleton.find_bone("LeftHand")
 	_tint(kit, variant)
 	_build_tree(variant)
+	composure = Composure.new()
+	skeleton.add_child(composure)
 	foot_lock = FootLock.new()
 	skeleton.add_child(foot_lock)
 	foot_lock.setup(skeleton, self)
@@ -231,6 +236,9 @@ func update_from(p: PlayerState, look: Vector3, dt: float) -> void:
 		b = b / s
 	tree.set("parameters/loco/blend_position", b)
 	tree.set("parameters/scale/scale", s)
+	if p.inner != null:
+		composure.nerves = p.inner.nerves
+		composure.slump = p.inner.slump()
 	# Marking, or holding a spot in a zone's cup: the low stance with the arms out, while (nearly) still.
 	var want_stance := 0.0
 	if p.role == "mark" or (p.role == "zone" and p.zone_role == "cup"):
@@ -279,3 +287,8 @@ func blend_position() -> Vector2:
 func _on_skeleton_updated() -> void:
 	for k in 2:
 		toes_final[k] = skeleton.global_transform * skeleton.get_bone_global_pose(_toes[k]).origin
+	var la := skeleton.find_bone("LeftArm")
+	var ra := skeleton.find_bone("RightArm")
+	shoulders_final = 0.5 * (skeleton.get_bone_global_pose(la).origin.y + skeleton.get_bone_global_pose(ra).origin.y)
+	var hd := skeleton.get_bone_global_pose(skeleton.find_bone("Head"))
+	head_final = hd.origin + hd.basis.y * 0.2

@@ -25,6 +25,7 @@ const ACUTE := 0.8             # pressure past this brings the firefighter whoev
 const OWN_ERROR := 0.25        # nerves added by a mistake of her own (a drop, a throw away)
 const TOUCH := 0.06            # nerves eased by a completed throw or catch
 const HUDDLE := 0.5            # the share of nerves left after the huddle between points
+const SLUMP := 1.6             # s: how long her head is down after a mistake of her own (the view)
 
 var self_energy := 0.7
 var sensitivity := 1.0         # how strongly pressure reaches her exile
@@ -33,6 +34,7 @@ var nerves := 0.0
 var manager := 0.0
 var firefighter := 0.0
 var pressure := 0.0            # the last pressure the match set
+var slump_left := 0.0          # s left of the moment after her own mistake
 
 
 func _init(rng: RandomNumberGenerator) -> void:
@@ -45,6 +47,7 @@ func _init(rng: RandomNumberGenerator) -> void:
 ## blends in as far as the nerves pass what Self can hold.
 func update(dt: float, p: float) -> void:
 	pressure = p
+	slump_left = maxf(0.0, slump_left - dt)
 	var stirred := clampf(p * sensitivity * (1.0 - BUFFER * self_energy), 0.0, 1.0)
 	nerves = move_toward(nerves, stirred, (RISE if stirred > nerves else SETTLE) * dt)
 	var over := clampf((nerves - BLEND_AT) / (1.0 - BLEND_AT), 0.0, 1.0)
@@ -55,6 +58,12 @@ func update(dt: float, p: float) -> void:
 
 func own_error() -> void:
 	nerves = minf(1.0, nerves + OWN_ERROR)
+	slump_left = SLUMP
+
+
+## 0-1: how far her head is down after her own mistake (easing back up over the last 0.4 s).
+func slump() -> float:
+	return clampf(slump_left / 0.4, 0.0, 1.0)
 
 
 func touch() -> void:
