@@ -43,6 +43,7 @@ var hud: Label
 var help: Label
 var log_label: Label
 var kind := "backhand"
+var high := false                  # backhands and forehands released high, over the mark
 var shot_path := ""
 var shot_frames := 240
 var frames := 0
@@ -104,6 +105,16 @@ func _unhandled_input(event: InputEvent) -> void:
 				kind = "forehand"
 			KEY_3:
 				kind = "hammer"
+			KEY_4:
+				kind = "blade"
+			KEY_5:
+				kind = "scoober"
+			KEY_6:
+				kind = "push"
+			KEY_7:
+				kind = "cloud"
+			KEY_H:
+				high = not high
 			KEY_TAB:
 				sim.switch_human()
 			KEY_Z:
@@ -121,7 +132,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if spot != null:
 			var huck := Input.is_physical_key_pressed(KEY_SPACE)
 			var io := Input.is_physical_key_pressed(KEY_SHIFT)
-			if sim.user_throw(spot, kind, io, huck):
+			var k := ("high_" + kind) if high and (kind == "backhand" or kind == "forehand") else kind
+			if sim.user_throw(spot, k, io, huck):
 				target_marker.position = Vector3(spot.x, 0.03, spot.z)
 				target_marker.visible = true
 
@@ -331,7 +343,7 @@ func _build_hud() -> void:
 	help.add_theme_font_size_override("font_size", 16)
 	help.add_theme_color_override("font_outline_color", Color.BLACK)
 	help.add_theme_constant_override("outline_size", 5)
-	help.text = "Offence: click to throw  ·  1 backhand  2 forehand  3 hammer  ·  Shift inside-out  ·  Space huck     Defence: WASD / arrows  ·  Tab switch  ·  Z zone or person     C camera  ·  F1 autoplay  ·  Esc quit"
+	help.text = "Offence: click to throw  ·  1 backhand  2 forehand  3 hammer  4 blade  5 scoober  6 push  7 cloud  ·  H high release  ·  Shift inside-out  ·  Space huck     Defence: WASD / arrows  ·  Tab switch  ·  Z zone or person     C camera  ·  F1 autoplay  ·  Esc quit"
 	layer.add_child(help)
 
 
@@ -442,7 +454,7 @@ func _update_hud() -> void:
 		stall_txt = "    Stalling %d" % sim.stall_called
 	var who: String = sim.names[sim.offence]
 	var arrow := "→" if sim.dir[sim.offence] > 0 else "←"
-	var mode := "autoplay" if sim.human_team < 0 else ("you throw: " + kind if sim.offence == 0 else "you defend")
+	var mode := "autoplay" if sim.human_team < 0 else ("you throw: " + ("high " if high and kind in ["backhand", "forehand"] else "") + kind if sim.offence == 0 else "you defend")
 	var call: String = sim.defence[0] + (" (next point: %s)" % sim.defence_call[0] if sim.defence_call[0] != "" else "")
 	mode += "        your defence: " + call
 	hud.text = "%s %d  –  %d %s        %s on offence %s%s\n%s" % [sim.names[0], sim.score[0], sim.score[1],

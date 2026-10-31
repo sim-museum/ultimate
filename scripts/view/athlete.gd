@@ -21,7 +21,12 @@ const TURN_RATE := 9.0          # rad/s: how fast the body turns to its heading
 const FACE_MOVE := 2.2          # m/s: above this the player faces where they run, below it the disc
 const THROW_LEAD := 0.15        # s: a throw seen only at its release starts its clip this long before it
 const THROW_CLIPS := {"backhand": ["backhand", "backhand2"], "pull": ["backhand", "backhand2"],
-		"forehand": ["forehand"], "hammer": ["hammer"]}
+		"forehand": ["forehand"], "hammer": ["hammer"],
+		# The new throws (ULTIMATE-3) on the nearest clip until they have their own: high releases and the cloud on
+		# the backhand or forehand, the blade on the backhand, the scoober (overhead) on the hammer, the push on the
+		# forehand.
+		"high_backhand": ["backhand", "backhand2"], "high_forehand": ["forehand"], "cloud": ["backhand", "backhand2"],
+		"blade": ["backhand", "backhand2"], "scoober": ["hammer"], "push": ["forehand"]}
 
 static var _clips := {}
 static var _scenes := {}

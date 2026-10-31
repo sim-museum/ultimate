@@ -20,7 +20,8 @@ To watch the AI play both teams:
 You play White.
 
 - **On offence:** click a spot on the field to throw there.
-  - `1` backhand, `2` forehand, `3` hammer.
+  - `1` backhand, `2` forehand, `3` hammer, `4` blade, `5` scoober, `6` push pass, `7` cloud (a floater over a
+    zone's cup). `H` releases backhands and forehands high, over the mark.
   - Hold `Shift` for inside-out, hold `Space` to huck.
   - The marker counts to ten.
 - **On defence:** `WASD` or the arrow keys steer the highlighted player. `Tab` switches to the player

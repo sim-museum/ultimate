@@ -23,7 +23,19 @@ const KINDS := {
 	"forehand": [4.0, 3.0, 12.0, 0.9, 0.5],
 	"hammer": [25.0, 4.0, 10.0, 2.0, 0.3],
 	"pull": [13.0, 2.0, -8.0, 1.0, -0.4],
+	# ULTIMATE-3 (PO: "Add cloud, high forehand, high backhand - these are commonly used"; no thumber):
+	"high_backhand": [2.0, 3.0, -12.0, 1.85, -0.3],     # released above the shoulder, over the mark
+	"high_forehand": [2.0, 3.0, 12.0, 1.8, 0.4],
+	"cloud": [15.0, 5.0, -4.0, 1.9, -0.3],              # a floater lofted from overhead into space (over the cup)
+	"blade": [18.0, 4.0, -60.0, 1.2, -0.3],             # steeply banked: a slicing arc that drops fast
+	"scoober": [30.0, 4.0, -10.0, 1.9, 0.0],            # overhead, upside down, short, spun the backhand way
+	"push": [8.0, 6.0, 0.0, 1.1, 0.4],                  # a short soft push from the forehand side, little spin
 }
+## The short throws' useful range, m (past it their flights balloon or dive).
+const RANGE := {"cloud": 15.0, "blade": 15.0, "scoober": 15.0, "push": 12.0}
+## Kinds that are a backhand or a forehand released differently: they use those throws' calibrated tables, from
+## their own release height.
+const FLAT_LIKE := {"high_backhand": "backhand", "high_forehand": "forehand"}
 ## The rigid disc (DiscFlight.rigid): a good thrower's releases by distance, rows [distance m, speed m/s, elevation,
 ## nose angle, bank] (degrees; a backhand's bank: negative is hyzer). Calibrated by tests/probe_calibrate.gd (Potts
 ## and Crowther coefficients, advance ratio 0.5, released 1 m up). The solver fine-tunes the speed within SPEED_BAND
@@ -45,7 +57,8 @@ const SPEED_BAND := 0.15
 const ADVANCE := 0.5               # spin: the rim's speed over the flight speed (d w / 2 v)
 ## Spin sense by kind (seen from the disc's top face): a right-hander's backhand and pull clockwise (-1), forehand
 ## and hammer anticlockwise (+1).
-const SPIN := {"backhand": -1.0, "forehand": 1.0, "hammer": 1.0, "pull": -1.0}
+const SPIN := {"backhand": -1.0, "forehand": 1.0, "hammer": 1.0, "pull": -1.0, "high_backhand": -1.0,
+		"high_forehand": 1.0, "cloud": -1.0, "blade": -1.0, "scoober": -1.0, "push": 0.4}
 const HUCK_EXTRA := [3.0, 0.5]     # a huck: launch this much higher (elevation, angle of attack): low and driving
 const HUCK_OVER := 22.0           # m/s: a flat throw that needs more than this is thrown as a huck
 
@@ -65,7 +78,7 @@ class Release:
 ## kind has no table (the hammer keeps its fixed angles).
 static func profile(kind: String, inside_out: bool, dist: float) -> Variant:
 	var table: Array = PROFILE_PULL if kind == "pull" else (PROFILE_IO if inside_out else PROFILE)
-	if kind == "hammer":
+	if not (kind in ["backhand", "forehand", "pull"] or FLAT_LIKE.has(kind)):
 		return null
 	if dist <= table[0][0]:
 		return table[0].slice(1)
@@ -85,19 +98,19 @@ static func release_state(thrower_pos: Vector3, heading: Vector3, kind: String, 
 	var aoa: float = deg_to_rad(k[1] + (HUCK_EXTRA[1] if huck else 0.0))
 	var bank: float = deg_to_rad(k[2] * (-1.0 if inside_out and kind != "hammer" else 1.0))
 	var pr: Variant = null
-	if DiscFlight.rigid and dist > 0.0 and kind != "hammer":
+	if DiscFlight.rigid and dist > 0.0 and profile(kind, inside_out, 10.0) != null:
 		pr = _row if _row != null else profile(kind, inside_out, dist)
 	if pr != null:
 		# The release for the distance (a huck is the same throw, longer). The tables are a backhand's; a forehand
 		# spins the other way, so its bank mirrors.
 		el = deg_to_rad(pr[1])
 		aoa = deg_to_rad(pr[2])
-		bank = deg_to_rad(pr[3] * float(SPIN[kind]) * -1.0)
+		bank = deg_to_rad(pr[3] * signf(float(SPIN[kind])) * -1.0)
 	var right := heading.cross(Vector3.UP).normalized()
 	var pos := thrower_pos + Vector3(0.0, k[3], 0.0) + right * float(k[4])
 	var vel := (heading * cos(el) + Vector3.UP * sin(el)) * speed
 	var n := DiscFlight.attitude(heading, el + aoa, bank)
-	if kind == "hammer":
+	if kind == "hammer" or kind == "scoober":
 		n = -n
 	var st := DiscFlight.State.new(pos, vel, n)
 	st.set_spin(float(SPIN[kind]) * ADVANCE * 2.0 * speed / DiscFlight.H_D)
@@ -139,7 +152,7 @@ static func _to_crossing(path: Array, from: Vector3, heading: Vector3, dist: flo
 static func solve(thrower_pos: Vector3, target: Vector3, kind: String, huck: bool = false,
 		inside_out: bool = false) -> Release:
 	var r := _solve(thrower_pos, target, kind, huck, inside_out, null)
-	if r.reachable or not DiscFlight.rigid or kind == "hammer":
+	if r.reachable or not DiscFlight.rigid or profile(kind, inside_out, 10.0) == null:
 		return r
 	# The rigid disc: the interpolated release sits on a knife edge near some distances; try the table's rows round
 	# it and keep the best (reachable first, then the nearest miss).
@@ -219,7 +232,8 @@ static func _solve(thrower_pos: Vector3, target: Vector3, kind: String, huck: bo
 		r.path = _to_crossing(r.path, thrower_pos, heading, dist)
 	r.arrival = r.path[-1][1]
 	r.flight_time = r.path[-1][0]
-	r.reachable = Vector3(r.arrival.x, 0.0, r.arrival.z).distance_to(flat_target) < 1.5 \
+	r.reachable = dist <= float(RANGE.get(kind, 1e9)) \
+			and Vector3(r.arrival.x, 0.0, r.arrival.z).distance_to(flat_target) < 1.5 \
 			and (not passing_end or (r.arrival.y > 0.3 and r.arrival.y < 2.6))     # knee height to a jumping catch
 	_row = null
 	return r

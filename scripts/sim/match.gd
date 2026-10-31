@@ -24,7 +24,10 @@ const CATCH_TOP := 2.7         # m: the highest catch, jumping
 const MARK_DIST := 1.6         # m: the marker stands this far from the thrower (disc space)
 const COUNT_RANGE := 3.0       # m: the marker counts only within this distance
 const DT := 1.0 / 120.0
-const WINDUP := {"backhand": 0.4, "forehand": 0.3, "hammer": 0.45, "pull": 0.6}   # s from decision to release
+const WINDUP := {"backhand": 0.4, "forehand": 0.3, "hammer": 0.45, "pull": 0.6, "high_backhand": 0.45,
+		"high_forehand": 0.35, "cloud": 0.45, "blade": 0.4, "scoober": 0.4, "push": 0.25}   # s from decision to release
+const HIGH_RELEASE := 0.4      # a high release over the mark: this share of the marker's chance of a hand on a break
+const CLOUD_RANGE := 15.0      # m: against a zone, a short throw whose line runs through the cup goes over it
 const ZONE_ROLES := ["deep", "wing_l", "wing_r", "middle", "cup", "cup", "cup"]
 const CLAMP_AFTER := 2.0       # s into a hold: the zone's cup closes in on the thrower
 const CUP_RANGE := 7.0         # m from the thrower: a zone defender this close can get a hand or foot to a throw
@@ -307,6 +310,7 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	_release(who, r, to)
 	stats.throws += 1
 	stats["throws%d" % offence] = stats.get("throws%d" % offence, 0) + 1
+	stats["k%d_%s" % [offence, r.kind]] = stats.get("k%d_%s" % [offence, r.kind], 0) + 1
 	var band := "len%d_%s" % [offence, "short" if aimed < 15.0 else ("medium" if aimed < 30.0 else "long")]
 	stats[band] = stats.get(band, 0) + 1
 	stats["hold%d" % offence] = stats.get("hold%d" % offence, 0.0) + hold_time
@@ -322,6 +326,8 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	# A break past the mark: a zone's marker stands among a cup and is beaten round the edge more often than a
 	# tight person-to-person mark (tune.zone_hand of the chance).
 	var hand := float(tune.hand_block) * (float(tune.zone_hand) if defence[1 - offence] == "zone" else 1.0)
+	if r.kind.begins_with("high_") or r.kind == "cloud" or r.kind == "scoober":
+		hand *= HIGH_RELEASE                                 # over the mark's hands
 	if breaking and rng.randf() < hand:
 		stats.blocks += 1
 		say("%s #%d gets a hand to the break throw" % [names[1 - offence], marker.number])
@@ -642,6 +648,7 @@ func _ai_throw() -> void:
 	var best_score := -1e9
 	var best_margin := -1e9
 	var best_spot := Vector3.ZERO
+	var best_kind := ""                    # "" a flat backhand or forehand; else cloud or high release
 	var safe: PlayerState = null           # late in the count: the throw with the most time to spare, anywhere
 	var safe_margin := -1e9
 	var safe_spot := Vector3.ZERO
@@ -673,8 +680,18 @@ func _ai_throw() -> void:
 				if q.role == "mark":
 					continue
 				d_t = minf(d_t, maxf(q.pos.distance_to(spot) - tune.def_reach, 0.0) / (q.speed * 0.85) + 0.25)
+			var breaking := is_break(holder.pos, spot)
+			var cup := zone and through_cup(holder.pos, spot)
+			var cand_kind := ""
+			if cup and not breaking and dist <= CLOUD_RANGE:
+				# Over the cup: a cloud, slower (about 2 s for 10 m), so raced on its own time.
+				cand_kind = "cloud"
+				cup = false
+				t = w + 0.2 + dist / 5.5
+			elif breaking:
+				cand_kind = "high"                             # a break goes over the mark
 			var margin := d_t - maxf(t, r_t)
-			var blocked := is_break(holder.pos, spot) or (zone and through_cup(holder.pos, spot))
+			var blocked := breaking or cup
 			if margin > safe_margin and not blocked:
 				safe_margin = margin
 				safe = p
@@ -684,7 +701,8 @@ func _ai_throw() -> void:
 			var progress := (spot.x - holder.pos.x) * d
 			var sc := clampf(margin, -2.0, 2.0) * 3.0 + 0.06 * progress - (1.0 if dist > 40.0 else 0.0)
 			if blocked:
-				sc -= float(tune.break_penalty)               # throw to the open side (round the cup) if you can
+				# Throw to the open side (round the cup) if you can; a high release over the mark halves the cost.
+				sc -= float(tune.break_penalty) * (0.5 if cand_kind == "high" else 1.0)
 			if Field.in_attacking_endzone(spot, d):
 				sc += 2.0
 			if sc > best_score:
@@ -692,6 +710,7 @@ func _ai_throw() -> void:
 				best = p
 				best_margin = margin
 				best_spot = spot
+				best_kind = cand_kind
 	# Swing it (the dump, the safest look) when nothing better is on: from stall 4 against a person defence, sooner
 	# against a zone, which is beaten by moving the disc side to side.
 	var swing_at := float(tune.zone_swing) if zone else float(tune.swing)
@@ -701,6 +720,7 @@ func _ai_throw() -> void:
 		best = safe
 		best_spot = safe_spot
 		best_margin = safe_margin
+		best_kind = ""
 		swinging = true
 	if best == null:
 		return
@@ -709,7 +729,14 @@ func _ai_throw() -> void:
 	var right := Vector3(d, 0, 0).cross(Vector3.UP)
 	var side := (best_spot - holder.pos).dot(right)
 	var kind := "forehand" if side > 0.0 else "backhand"
+	if best_kind == "cloud":
+		kind = "cloud"
+	elif best_kind == "high":
+		kind = "high_" + kind
 	var r := ThrowSolver.solve_auto(holder.pos, best_spot, kind)
+	if not r.reachable and kind != "backhand" and kind != "forehand":
+		kind = "forehand" if side > 0.0 else "backhand"          # the special release does not get there: a flat one
+		r = ThrowSolver.solve_auto(holder.pos, best_spot, kind)
 	# Lead the receiver: with the throw's real flight time, where will they be? If that is off the spot, throw there.
 	var t_real := float(WINDUP.get(kind, 0.35)) + r.flight_time
 	var to_goal := Vector3(best.goal.x - best.pos.x, 0, best.goal.z - best.pos.z)
