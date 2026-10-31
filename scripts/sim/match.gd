@@ -293,8 +293,8 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	var yaw_err := rng.randfn(0.0, deg_to_rad(1.0) * pressure)
 	var speed_err := 1.0 + rng.randfn(0.0, 0.015 * pressure)
 	var s := r.state
-	s.vel = s.vel.rotated(Vector3.UP, yaw_err) * speed_err
-	s.normal = s.normal.rotated(Vector3.UP, yaw_err)
+	s.turn(yaw_err)
+	s.vel *= speed_err
 	r.path = DiscFlight.simulate(s, ThrowSolver.SOLVE_DT, 0.0)       # all the way down: runners chase it
 	r.arrival = r.path[-1][1]
 	var who := holder
