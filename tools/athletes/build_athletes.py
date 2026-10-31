@@ -576,6 +576,15 @@ def main():
             meta[name] = {"loop": False, "length": len(poses) / FPS, "velocity": {vn: {"right": 0.0, "forward": 0.0}},
                           "release": spec["release"], "source": "keyed (keyed_throws.py)"}
             log(f"{vn} {name}: keyed, {len(poses)} frames, release {spec['release']:.2f} s")
+        # Stances (keyed_throws.STANCES): loops played over the locomotion, not part of its blend space (loop False
+        # here; the game loops them).
+        for name, spec in keyed_throws.STANCES.items():
+            poses = keyed_throws.build(info, mocap["idle"][0], spec)
+            write_action(info, name, poses)
+            meta[name] = {"loop": False, "stance": True, "length": len(poses) / FPS,
+                          "velocity": {vn: {"right": 0.0, "forward": 0.0}}, "release": None,
+                          "source": "keyed (keyed_throws.py)"}
+            log(f"{vn} {name}: keyed stance, {len(poses)} frames")
         # The lefty forehand (PO 2026-10-31: "add lefty forehand to the types of throws"; "right handed players also
         # use lefty forehand, especially handlers"): the forehand mirrored, an off-hand flick.
         for name in ("forehand",):

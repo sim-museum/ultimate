@@ -19,6 +19,8 @@ const HAIR_TINT := {"as1": Color(0.22, 0.2, 0.19), "as2": Color(0.3, 0.27, 0.25)
 const HAIR_NODES := ["ponytail", "braid", "bob", "short0", "afro", "long0"]
 const TURN_RATE := 9.0          # rad/s: how fast the body turns to its heading
 const FACE_MOVE := 2.2          # m/s: above this the player faces where they run, below it the disc
+const STANCE_STILL := 2.5      # m/s: the mark's stance fades out by this speed (moving, the legs run or shuffle)
+const STANCE_EASE := 4.0       # per s: how fast the stance blends in or out
 const THROW_LEAD := 0.15        # s: a throw seen only at its release starts its clip this long before it
 const THROW_CLIPS := {"backhand": ["backhand", "backhand2"], "pull": ["backhand", "backhand2"],
 		"forehand": ["forehand"], "hammer": ["hammer"],
@@ -47,6 +49,8 @@ var number_back: Label3D
 var throwing := ""              # the throw clip last started
 var throw_clock := 0.0          # where that clip is now (s)
 var _run_speed := 1.0           # the fastest forward clip's own speed
+var stance := 0.0               # how far into the mark's stance (0-1)
+var _has_stance := false
 
 
 static func clips() -> Dictionary:
@@ -140,7 +144,21 @@ func _build_tree(variant: String) -> void:
 	shot.fadein_time = 0.08
 	shot.fadeout_time = 0.35
 	bt.add_node("throw", shot)
-	bt.connect_node("throw", 0, "scale")
+	# The mark's stance (a keyed loop) over the locomotion, by amount (update_from).
+	var stance_name := _anim_name(lib_names, "mark")
+	var under := "scale"
+	if stance_name != "":
+		anim.get_animation(stance_name).loop_mode = Animation.LOOP_LINEAR
+		var st_anim := AnimationNodeAnimation.new()
+		st_anim.animation = stance_name
+		bt.add_node("stance_anim", st_anim)
+		var st := AnimationNodeBlend2.new()
+		bt.add_node("stance", st)
+		bt.connect_node("stance", 0, "scale")
+		bt.connect_node("stance", 1, "stance_anim")
+		under = "stance"
+		_has_stance = true
+	bt.connect_node("throw", 0, under)
 	bt.connect_node("throw", 1, "seek")
 	bt.connect_node("output", 0, "throw")
 	tree = AnimationTree.new()
@@ -213,6 +231,13 @@ func update_from(p: PlayerState, look: Vector3, dt: float) -> void:
 		b = b / s
 	tree.set("parameters/loco/blend_position", b)
 	tree.set("parameters/scale/scale", s)
+	# Marking, or holding a spot in a zone's cup: the low stance with the arms out, while (nearly) still.
+	var want_stance := 0.0
+	if p.role == "mark" or (p.role == "zone" and p.zone_role == "cup"):
+		want_stance = clampf(1.0 - speed / STANCE_STILL, 0.0, 1.0)
+	stance = move_toward(stance, want_stance, STANCE_EASE * dt)
+	if _has_stance:
+		tree.set("parameters/stance/blend_amount", stance)
 
 
 ## A throw of this kind is wound up: the disc leaves the hand `lead` seconds from now (the sim's wind-up). The

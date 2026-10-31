@@ -1,5 +1,5 @@
 """Throws keyed by hand, for a right-handed thrower: the forehand (flick) and the hammer, which the CMU database
-does not have. Each is a few key poses over time, built on the athlete's own idle pose (from mocap, so the rest of
+does not have; and the mark's stance. Each is a few key poses over time, built on the athlete's own idle pose (from mocap, so the rest of
 the body stays human), sampled at FPS with eased interpolation of the pose controls.
 
 Pose controls (body frame: right, forward, up, in metres from the ground under the idle hips; angles in degrees):
@@ -68,6 +68,24 @@ HAMMER = {
 }
 
 THROWS = {"forehand": FOREHAND, "hammer": HAMMER}
+
+# The mark's stance (ULTIMATE-2): low, feet wide, weight forward, both arms out wide at about waist height to take
+# away the throwing lanes, a small bounce on the balls of the feet. A loop of 1 s, played over the locomotion while
+# a player marks (or holds a cup spot); no release.
+_MARK = {"hips": {"drop": 0.20, "shift": (0.0, 0.0), "yaw": 0.0, "lean": 22.0},
+         "spine": {"twist": 0.0, "bend": 14.0, "side": 0.0},
+         "rfoot": (0.36, 0.02, None), "lfoot": (-0.36, -0.02, None),
+         "rhand": (0.85, 0.30, 0.85), "relbow": (1.0, -0.3, -0.5),
+         "lhand": (-0.85, 0.30, 0.85), "lelbow": (-1.0, -0.3, -0.5)}
+MARK = {
+    "release": 0.0,
+    "keys": [
+        (0.00, _MARK),
+        (0.50, {"hips": {"drop": 0.24}, "rhand": (0.88, 0.32, 0.80), "lhand": (-0.88, 0.32, 0.80)}),
+        (1.00, {"hips": {"drop": 0.20}, "rhand": _MARK["rhand"], "lhand": _MARK["lhand"]}),
+    ],
+}
+STANCES = {"mark": MARK}
 
 
 def B(r, f, u):
