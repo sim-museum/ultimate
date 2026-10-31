@@ -25,7 +25,15 @@ const MARK_DIST := 1.6         # m: the marker stands this far from the thrower 
 const COUNT_RANGE := 3.0       # m: the marker counts only within this distance
 const DT := 1.0 / 120.0
 const WINDUP := {"backhand": 0.4, "forehand": 0.3, "hammer": 0.45, "pull": 0.6, "high_backhand": 0.45,
-		"high_forehand": 0.35, "cloud": 0.45, "blade": 0.4, "scoober": 0.4, "push": 0.25}   # s from decision to release
+		"high_forehand": 0.35, "cloud": 0.45, "blade": 0.4, "scoober": 0.4, "push": 0.25,
+		"lefty_forehand": 0.3}   # s from decision to release
+## The lefty forehand (PO 10-31: "right handed players also use lefty forehand, especially handlers"): a right-hander's
+## off-hand flick, a quick break round the mark on the backhand side, released wide of the marker's reach. Short
+## (an off-hand has less power), less accurate, but harder for the mark to get a hand to than a backhand break.
+const LEFTY_RANGE := 18.0      # m: the AI's longest lefty forehand
+const LEFTY_HAND := 0.5        # its share of the marker's chance of a hand on a break
+const LEFTY_ERROR := 1.4       # its aiming error over a right-handed throw's
+const HANDLERS := 3            # the first three of each team (by index) are handlers: they throw the lefty forehand
 const GUST := 0.35             # gusts: up to this share of the steady wind, either way
 const WIND_RISK := 0.25        # the AI's score cost per (m/s of wind x s in the air): floaty throws in wind are risky
 const HIGH_RELEASE := 0.4      # a high release over the mark: this share of the marker's chance of a hand on a break
@@ -285,7 +293,7 @@ func _release(p: PlayerState, r: ThrowSolver.Release, to: PlayerState) -> void:
 	stall_called = 0
 
 
-## The human's throw: to a spot on the field. kind: backhand, forehand or hammer.
+## The human's throw: to a spot on the field. kind: any of ThrowSolver.KINDS.
 func user_throw(target: Vector3, kind: String, inside_out: bool = false, huck: bool = false) -> bool:
 	if phase != Phase.HOLD or offence != human_team or holder == null or windup_left > 0.0:
 		return false
@@ -317,6 +325,8 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	var breaking := is_break(holder.pos, r.arrival)
 	if marker != null and marker.pos.distance_to(holder.pos) < COUNT_RANGE:
 		pressure = 2.2 if breaking else 1.6
+	if r.kind == "lefty_forehand":
+		pressure *= LEFTY_ERROR                              # the off hand
 	var yaw_err := rng.randfn(0.0, deg_to_rad(1.0) * pressure)
 	var speed_err := 1.0 + rng.randfn(0.0, 0.015 * pressure)
 	var aimed := r.arrival.distance_to(holder.pos)          # the throw's length to its target (for the stats)
@@ -348,6 +358,8 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	var hand := float(tune.hand_block) * (float(tune.zone_hand) if defence[1 - offence] == "zone" else 1.0)
 	if r.kind.begins_with("high_") or r.kind == "cloud" or r.kind == "scoober":
 		hand *= HIGH_RELEASE                                 # over the mark's hands
+	elif r.kind == "lefty_forehand":
+		hand *= LEFTY_HAND                                   # round the mark, wide of its reach
 	if breaking and rng.randf() < hand:
 		stats.blocks += 1
 		say("%s #%d gets a hand to the break throw" % [names[1 - offence], marker.number])
@@ -668,7 +680,7 @@ func _ai_throw() -> void:
 	var best_score := -1e9
 	var best_margin := -1e9
 	var best_spot := Vector3.ZERO
-	var best_kind := ""                    # "" a flat backhand or forehand; else cloud or high release
+	var best_kind := ""                    # "" a flat backhand or forehand; else cloud, high (release) or lefty
 	var safe: PlayerState = null           # late in the count: the throw with the most time to spare, anywhere
 	var safe_margin := -1e9
 	var safe_spot := Vector3.ZERO
@@ -708,6 +720,9 @@ func _ai_throw() -> void:
 				cand_kind = "cloud"
 				cup = false
 				t = w + 0.2 + dist / 5.5
+			elif breaking and holder.idx < HANDLERS and dist <= LEFTY_RANGE \
+					and (spot - holder.pos).dot(Vector3(d, 0, 0).cross(Vector3.UP)) < 0.0:
+				cand_kind = "lefty"                            # a handler's break on the backhand side: the off hand
 			elif breaking:
 				cand_kind = "high"                             # a break goes over the mark
 			var margin := d_t - maxf(t, r_t)
@@ -723,7 +738,7 @@ func _ai_throw() -> void:
 			var sc := clampf(margin, -2.0, 2.0) * 3.0 + 0.06 * progress - (1.0 if dist > 40.0 else 0.0) - wind_cost
 			if blocked:
 				# Throw to the open side (round the cup) if you can; a high release over the mark halves the cost.
-				sc -= float(tune.break_penalty) * (0.5 if cand_kind == "high" else 1.0)
+				sc -= float(tune.break_penalty) * (0.5 if cand_kind in ["high", "lefty"] else 1.0)
 			if Field.in_attacking_endzone(spot, d):
 				sc += 2.0
 			if sc > best_score:
@@ -749,14 +764,17 @@ func _ai_throw() -> void:
 		return
 	var right := Vector3(d, 0, 0).cross(Vector3.UP)
 	var side := (best_spot - holder.pos).dot(right)
-	var kind := "forehand" if side > 0.0 else "backhand"
+	var flat := "forehand" if side > 0.0 else "backhand"
+	var kind := flat
 	if best_kind == "cloud":
 		kind = "cloud"
 	elif best_kind == "high":
 		kind = "high_" + kind
+	elif best_kind == "lefty":
+		kind = "lefty_forehand"
 	var r := ThrowSolver.solve_auto(holder.pos, best_spot, kind)
-	if not r.reachable and kind != "backhand" and kind != "forehand":
-		kind = "forehand" if side > 0.0 else "backhand"          # the special release does not get there: a flat one
+	if not r.reachable and kind != flat:
+		kind = flat                                              # the special release does not get there: a flat one
 		r = ThrowSolver.solve_auto(holder.pos, best_spot, kind)
 	# Lead the receiver: with the throw's real flight time, where will they be? If that is off the spot, throw there.
 	var t_real := float(WINDUP.get(kind, 0.35)) + r.flight_time

@@ -2,7 +2,8 @@ extends Node3D
 ## The view: the field, motion-captured athletes (scripts/view/athlete.gd), the disc and the cameras over the match
 ## simulation (scripts/sim). White is the human's team.
 ##
-## Offence: click a spot on the field to throw there. 1 backhand, 2 forehand, 3 hammer; hold Shift for
+## Offence: click a spot on the field to throw there. 1 backhand, 2 forehand, 3 hammer, 4-7 blade, scoober, push,
+## cloud, 8 lefty forehand (the off hand); hold Shift for
 ## inside-out, hold Space for a huck. Defence: WASD or the arrow keys steer the highlighted player, Tab
 ## switches to the player nearest the disc. Z: your defence (zone or person). L: the light (midday or late sun).
 ## C: the next camera (field, tower, sideline, behind). F1: autoplay (both
@@ -134,6 +135,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				kind = "push"
 			KEY_7:
 				kind = "cloud"
+			KEY_8:
+				kind = "lefty_forehand"
 			KEY_H:
 				high = not high
 			KEY_TAB:
@@ -377,7 +380,7 @@ func _build_hud() -> void:
 	help.add_theme_font_size_override("font_size", 16)
 	help.add_theme_color_override("font_outline_color", Color.BLACK)
 	help.add_theme_constant_override("outline_size", 5)
-	help.text = "Offence: click to throw  ·  1 backhand  2 forehand  3 hammer  4 blade  5 scoober  6 push  7 cloud  ·  H high release  ·  Shift inside-out  ·  Space huck\nDefence: WASD / arrows  ·  Tab switch  ·  Z zone or person     L light  ·  C camera  ·  F1 autoplay  ·  Esc quit"
+	help.text = "Offence: click to throw  ·  1 backhand  2 forehand  3 hammer  4 blade  5 scoober  6 push  7 cloud  8 lefty forehand  ·  H high release  ·  Shift inside-out  ·  Space huck\nDefence: WASD / arrows  ·  Tab switch  ·  Z zone or person     L light  ·  C camera  ·  F1 autoplay  ·  Esc quit"
 	layer.add_child(help)
 
 
@@ -488,7 +491,7 @@ func _update_hud() -> void:
 		stall_txt = "    Stalling %d" % sim.stall_called
 	var who: String = sim.names[sim.offence]
 	var arrow := "→" if sim.dir[sim.offence] > 0 else "←"
-	var mode := "autoplay" if sim.human_team < 0 else ("you throw: " + ("high " if high and kind in ["backhand", "forehand"] else "") + kind if sim.offence == 0 else "you defend")
+	var mode := "autoplay" if sim.human_team < 0 else ("you throw: " + ("high " if high and kind in ["backhand", "forehand"] else "") + kind.replace("_", " ") if sim.offence == 0 else "you defend")
 	var call: String = sim.defence[0] + (" (next point: %s)" % sim.defence_call[0] if sim.defence_call[0] != "" else "")
 	mode += "        your defence: " + call
 	if sim.wind_base != Vector3.ZERO:

@@ -26,7 +26,9 @@ const THROW_CLIPS := {"backhand": ["backhand", "backhand2"], "pull": ["backhand"
 		# the backhand or forehand, the blade on the backhand, the scoober (overhead) on the hammer, the push on the
 		# forehand.
 		"high_backhand": ["backhand", "backhand2"], "high_forehand": ["forehand"], "cloud": ["backhand", "backhand2"],
-		"blade": ["backhand", "backhand2"], "scoober": ["hammer"], "push": ["forehand"]}
+		"blade": ["backhand", "backhand2"], "scoober": ["hammer"], "push": ["forehand"],
+		# The lefty forehand: the forehand mirrored (build_athletes.py mirror_poses), an off-hand flick.
+		"lefty_forehand": ["lefty_forehand"]}
 
 static var _clips := {}
 static var _scenes := {}
@@ -40,6 +42,7 @@ var foot_lock: FootLock
 var toes_final: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   # the toes where they are drawn (after foot locking)
 var _toes: Array = []
 var hand_bone := -1
+var off_hand_bone := -1         # the left hand: it holds the disc through a lefty forehand
 var number_back: Label3D
 var throwing := ""              # the throw clip last started
 var throw_clock := 0.0          # where that clip is now (s)
@@ -62,6 +65,7 @@ func setup(variant: String, kit: Dictionary, number: int) -> void:
 	skeleton = model.find_children("*", "Skeleton3D", true, false)[0]
 	anim = model.find_children("*", "AnimationPlayer", true, false)[0]
 	hand_bone = skeleton.find_bone("RightHand")
+	off_hand_bone = skeleton.find_bone("LeftHand")
 	_tint(kit, variant)
 	_build_tree(variant)
 	foot_lock = FootLock.new()
@@ -87,9 +91,8 @@ func _tint(kit: Dictionary, variant: String) -> void:
 			c = kit["jersey"]
 		elif n.begins_with("Shorts"):
 			c = kit["shorts"]
-		elif n.begins_with("Sleeves") or n.begins_with("KneeSleeves") or n.begins_with("Headband") \
-				or n.begins_with("Visor"):
-			c = kit["sleeves"]                           # the undershirt, knee sleeves, headbands and visors match
+		elif n.begins_with("Sleeves") or n.begins_with("KneeSleeves") or n.begins_with("Headband"):
+			c = kit["sleeves"]                           # the undershirt, knee sleeves and headbands match
 		if c.a == 0.0:
 			continue
 		var mat := StandardMaterial3D.new()
@@ -237,9 +240,10 @@ func is_throwing() -> bool:
 
 
 func hand_position() -> Vector3:
-	if hand_bone < 0:
+	var b := off_hand_bone if throwing == "lefty_forehand" and is_throwing() else hand_bone
+	if b < 0:
 		return global_position + Vector3(0, 1.0, 0)
-	return skeleton.global_transform * skeleton.get_bone_global_pose(hand_bone).origin
+	return skeleton.global_transform * skeleton.get_bone_global_pose(b).origin
 
 
 func blend_position() -> Vector2:

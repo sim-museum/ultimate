@@ -504,6 +504,18 @@
    },
    "release": 0.45,
    "source": "keyed (keyed_throws.py)"
+  },
+  "lefty_forehand": {
+   "loop": false,
+   "length": 1.0333333333333334,
+   "velocity": {
+    "w5": {
+     "right": 0.0,
+     "forward": 0.0
+    }
+   },
+   "release": 0.3,
+   "source": "mirrored forehand"
   }
  },
  "variants": [

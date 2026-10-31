@@ -62,15 +62,14 @@ CLIPS = [
 # The game is women's ultimate. Five women with East Asian features (the white team is mostly East Asian players),
 # four others; ponytails, braids, buns: hair tied back, as in the real game.
 # "sleeves": the long-sleeved shirt, its forearms a separate piece the game tints dark (an undershirt).
-# "knee": knee sleeves ("l", "r" or "both"); "headband": a band round the forehead (both tinted like the undershirt);
-# "visor": a band with a brim over the eyes (tinted like the undershirt; instead of a headband).
-# The gold-standard broadcasts show knee sleeves, headbands and visors on many players.
+# "knee": knee sleeves ("l", "r" or "both"); "headband": a band round the forehead (both tinted like the undershirt).
+# The gold-standard broadcasts show knee sleeves and headbands on many players.
 DEFAULT_VARIANTS = ["as1", "as2", "as3", "as4", "as5", "w1", "w2", "w4", "w5"]
 _F = {"gender": 0.0, "proxy": "female_muscle_13442"}
 _ASIA = {"african": 0.03, "asian": 0.94, "caucasian": 0.03}
 VARIANTS = {
     "as1": dict(_F, skin="young_asian_female", hair="ponytail01", eyebrows="eyebrow004", eyes="brown",
-                sleeves=True, knee="both", headband=False, visor=True, phen=dict(_ASIA, height=0.42, muscle=0.66, weight=0.40)),
+                sleeves=True, knee="both", headband=False, phen=dict(_ASIA, height=0.42, muscle=0.66, weight=0.40)),
     "as2": dict(_F, skin="young_asian_female", hair="braid01", eyebrows="eyebrow002", eyes="brown",
                 sleeves=False, knee=None, headband=True, phen=dict(_ASIA, height=0.50, muscle=0.70, weight=0.42)),
     "as3": dict(_F, skin="young_asian_female", hair="bob01", eyebrows="eyebrow005", eyes="brownlight",
@@ -83,7 +82,7 @@ VARIANTS = {
                sleeves=False, knee="l", headband=True, phen={"height": 0.55, "muscle": 0.68, "weight": 0.42, "african": 0.9, "asian": 0.05,
                                     "caucasian": 0.05}),
     "w2": dict(_F, skin="young_caucasian_female", hair="ponytail01", eyebrows="eyebrow007", eyes="blue",
-               sleeves=True, knee="both", headband=False, visor=True, phen={"height": 0.6, "muscle": 0.65, "weight": 0.4, "african": 0.05, "asian": 0.05,
+               sleeves=True, knee="both", headband=False, phen={"height": 0.6, "muscle": 0.65, "weight": 0.4, "african": 0.05, "asian": 0.05,
                                    "caucasian": 0.9}),
     "w4": dict(_F, skin="young_caucasian_female2", hair="ponytail01", eyebrows="eyebrow010", eyes="green",
                sleeves=False, knee=None, headband=True, phen={"height": 0.65, "muscle": 0.62, "weight": 0.44, "african": 0.2, "asian": 0.1,
@@ -258,12 +257,11 @@ def make_accessories(v):
             knee = rig.matrix_world @ rig.data.bones[f"{side}Leg"].head_local
             pieces.append(("KneeSleeves", lambda c, k=knee: k.z - 0.07 < c.z < k.z + 0.09
                            and math.hypot(c.x - k.x, c.y - k.y) < 0.11, 0.004, (knee.z - 0.06, knee.z + 0.08)))
-    top = max((body.matrix_world @ vx.co).z for vx in body.data.vertices)
-    head = rig.matrix_world @ rig.data.bones["Head"].head_local
-    for kind in ("headband", "visor"):
-        if v.get(kind):
-            pieces.append((kind.capitalize(), lambda c, t=top, h=head: t - 0.085 < c.z < t - 0.05
-                           and math.hypot(c.x - h.x, c.y - h.y) < 0.14, 0.009, (top - 0.08, top - 0.052)))
+    if v.get("headband"):
+        top = max((body.matrix_world @ vx.co).z for vx in body.data.vertices)
+        head = rig.matrix_world @ rig.data.bones["Head"].head_local
+        pieces.append(("Headband", lambda c, t=top, h=head: t - 0.085 < c.z < t - 0.05
+                       and math.hypot(c.x - h.x, c.y - h.y) < 0.14, 0.009, (top - 0.08, top - 0.052)))
     made = {}
     for name, inside, push, (lo, hi) in pieces:
         o = body.copy()
@@ -290,8 +288,6 @@ def make_accessories(v):
         o.data.materials.clear()
         o.data.materials.append(mat)
         made.setdefault(name, []).append(o)
-    if "Visor" in made:
-        add_brim(made["Visor"][0], body, top, head)
     # One object per kind (both knees together).
     for name, objs in made.items():
         bpy.ops.object.select_all(action="DESELECT")
@@ -302,51 +298,6 @@ def make_accessories(v):
             bpy.ops.object.join()
         bpy.context.view_layer.objects.active.name = name
         log("accessory", name, len(bpy.context.view_layer.objects.active.data.polygons), "faces")
-
-
-def add_brim(o, body, top, head):
-    """A visor's brim on its band: a crescent over the eyes, its inner edge on the forehead just outside the skin
-    at the band's height, reaching 6 cm forward at the front and tapering to nothing at the temples, drooping
-    1.5 cm and a few millimetres thick. Skinned wholly to the head. The body faces -Y."""
-    import bmesh
-    mw = body.matrix_world
-    z0 = top - 0.06
-    pts = [mw @ vx.co for vx in body.data.vertices]
-    ring = [p for p in pts if abs(p.z - z0) < 0.012 and p.y < head.y]
-    n, half = 17, math.radians(72)
-    inner = []
-    for i in range(n):
-        a = -half + 2 * half * i / (n - 1)            # 0: straight ahead (-Y)
-        d = Vector((math.sin(a), -math.cos(a), 0))
-        r = max(((p - head).to_2d().dot(d.to_2d()) for p in ring
-                 if abs((p - head).to_2d().normalized().dot(Vector((-d.y, d.x)))) < 0.2), default=0.09)
-        inner.append((head.x + d.x * (r + 0.012), head.y + d.y * (r + 0.012), d))
-    bm = bmesh.new()
-    bm.from_mesh(o.data)
-    dl = bm.verts.layers.deform.verify()
-    g = o.vertex_groups["Head"].index
-    mwi = o.matrix_world.inverted()
-    rows = []
-    for x, y, d in inner:
-        a = math.acos(max(-1.0, min(1.0, -d.y)))
-        reach = 0.062 * max(0.0, math.cos(a * 1.15)) ** 1.2
-        row = []
-        for k, (dx, dz) in enumerate(((0.0, 0.0), (reach, -0.015), (reach, -0.019), (0.0, -0.004))):
-            w = Vector((x + d.x * dx, y + d.y * dx, z0 + dz))
-            vx = bm.verts.new(mwi @ w)
-            vx[dl][g] = 1.0
-            row.append(vx)
-        rows.append(row)
-    for i in range(n - 1):
-        for k in range(4):
-            a, b = rows[i][k], rows[i][(k + 1) % 4]
-            c, e = rows[i + 1][(k + 1) % 4], rows[i + 1][k]
-            if len({a, b, c, e}) == 4:
-                bm.faces.new((a, b, c, e))
-    bm.normal_update()
-    bm.to_mesh(o.data)
-    bm.free()
-    log("visor brim", n, "stations")
 
 
 # ---------------------------------------------------------------------------------------------- the motion
@@ -478,6 +429,31 @@ def mocap_poses(info, sk, frames):
     return poses, sc
 
 
+def mirror_poses(info, poses):
+    """The same motion mirrored left to right: each bone takes its twin's (Left/Right swapped) armature-space rotation,
+    reflected through the body's middle (x = 0 in the armature), re-expressed in the bone's own rest frame: with
+    M the reflection, T'[n] = M T[twin] C[n] where C[n] = (M rest[twin])^-1 rest[n] (so the rest pose maps to
+    itself, and M T C is a rotation). The hips' path is reflected the same way."""
+    M = Matrix(((-1, 0, 0), (0, 1, 0), (0, 0, 1)))
+
+    def twin(n):
+        for a, b in (("Left", "Right"), ("Right", "Left")):
+            if a in n and n.replace(a, b) in info.rest3:
+                return n.replace(a, b)
+        if len(n) > 1 and n[0] in "LR" and n[1].isupper():
+            m = ("R" if n[0] == "L" else "L") + n[1:]
+            if m in info.rest3:
+                return m
+        return n
+
+    tw = {n: twin(n) for n in info.order}
+    C = {n: (M @ info.rest3[tw[n]]).inverted() @ info.rest3[n] for n in info.order}
+    out = []
+    for T, h in poses:
+        out.append(({n: M @ T[tw[n]] @ C[n] for n in info.order}, M @ h))
+    return out
+
+
 def write_action(info, name, poses):
     """Key a clip from armature-space poses (T, hips head) at one frame per 1/FPS s and push it to an NLA track."""
     rig = info.rig
@@ -595,10 +571,17 @@ def main():
         # The throws CMU does not have, keyed by hand from the idle pose (keyed_throws.py).
         for name, spec in keyed_throws.THROWS.items():
             poses = keyed_throws.build(info, mocap["idle"][0], spec)
+            mocap[name] = poses
             write_action(info, name, poses)
             meta[name] = {"loop": False, "length": len(poses) / FPS, "velocity": {vn: {"right": 0.0, "forward": 0.0}},
                           "release": spec["release"], "source": "keyed (keyed_throws.py)"}
             log(f"{vn} {name}: keyed, {len(poses)} frames, release {spec['release']:.2f} s")
+        # The lefty forehand (PO 2026-10-31: "add lefty forehand to the types of throws"; "right handed players also
+        # use lefty forehand, especially handlers"): the forehand mirrored, an off-hand flick.
+        for name in ("forehand",):
+            write_action(info, "lefty_" + name, mirror_poses(info, mocap[name]))
+            meta["lefty_" + name] = dict(meta[name], source="mirrored " + name)
+            log(f"{vn} lefty_{name}: mirrored, {len(mocap[name])} frames")
         # Textures: at most 1024 px, saved as JPEG in the GLB (players are small on screen; the repo stays small).
         for img in bpy.data.images:
             w, h = img.size

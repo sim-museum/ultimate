@@ -30,12 +30,16 @@ const KINDS := {
 	"blade": [18.0, 4.0, -60.0, 1.2, -0.3],             # steeply banked: a slicing arc that drops fast
 	"scoober": [30.0, 4.0, -10.0, 1.9, 0.0],            # overhead, upside down, short, spun the backhand way
 	"push": [8.0, 6.0, 0.0, 1.1, 0.4],                  # a short soft push from the forehand side, little spin
+	# The lefty forehand (PO 10-31: "add lefty forehand to the types of throws"; "right handed players also use lefty
+	# forehand, especially handlers"): the off-hand flick, released wide on the backhand side and spun clockwise like
+	# a backhand, so it flies like one, but from further out round the mark and quicker.
+	"lefty_forehand": [4.0, 3.0, -12.0, 0.9, -0.7],
 }
 ## The short throws' useful range, m (past it their flights balloon or dive).
-const RANGE := {"cloud": 15.0, "blade": 15.0, "scoober": 15.0, "push": 12.0}
+const RANGE := {"cloud": 15.0, "blade": 15.0, "scoober": 15.0, "push": 12.0, "lefty_forehand": 25.0}
 ## Kinds that are a backhand or a forehand released differently: they use those throws' calibrated tables, from
 ## their own release height.
-const FLAT_LIKE := {"high_backhand": "backhand", "high_forehand": "forehand"}
+const FLAT_LIKE := {"high_backhand": "backhand", "high_forehand": "forehand", "lefty_forehand": "backhand"}
 ## The rigid disc (DiscFlight.rigid): a good thrower's releases by distance, rows [distance m, speed m/s, elevation,
 ## nose angle, bank] (degrees; a backhand's bank: negative is hyzer). Calibrated by tests/probe_calibrate.gd (Potts
 ## and Crowther coefficients, advance ratio 0.5, released 1 m up). The solver fine-tunes the speed within SPEED_BAND
@@ -58,7 +62,7 @@ const ADVANCE := 0.5               # spin: the rim's speed over the flight speed
 ## Spin sense by kind (seen from the disc's top face): a right-hander's backhand and pull clockwise (-1), forehand
 ## and hammer anticlockwise (+1).
 const SPIN := {"backhand": -1.0, "forehand": 1.0, "hammer": 1.0, "pull": -1.0, "high_backhand": -1.0,
-		"high_forehand": 1.0, "cloud": -1.0, "blade": -1.0, "scoober": -1.0, "push": 0.4}
+		"high_forehand": 1.0, "cloud": -1.0, "blade": -1.0, "scoober": -1.0, "push": 0.4, "lefty_forehand": -1.0}
 const HUCK_EXTRA := [3.0, 0.5]     # a huck: launch this much higher (elevation, angle of attack): low and driving
 const HUCK_OVER := 22.0           # m/s: a flat throw that needs more than this is thrown as a huck
 

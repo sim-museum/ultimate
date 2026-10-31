@@ -21,7 +21,8 @@ You play White.
 
 - **On offence:** click a spot on the field to throw there.
   - `1` backhand, `2` forehand, `3` hammer, `4` blade, `5` scoober, `6` push pass, `7` cloud (a floater over a
-    zone's cup). `H` releases backhands and forehands high, over the mark.
+    zone's cup), `8` lefty forehand (the off-hand flick, a quick break round the mark on the backhand side).
+    `H` releases backhands and forehands high, over the mark.
   - Hold `Shift` for inside-out, hold `Space` to huck.
   - The marker counts to ten.
 - **On defence:** `WASD` or the arrow keys steer the highlighted player. `Tab` switches to the player
@@ -61,13 +62,13 @@ You play White.
   - players chase the disc, and catch, block or lay out for it.
 
 - **The players:** women athletes with skeletons, in jerseys and shorts tinted to the team (White and Maroon),
-  some with dark undershirt sleeves, knee sleeves, headbands or visors, with numbers on their backs. Two observers in
+  some with dark undershirt sleeves, knee sleeves or headbands, with numbers on their backs. Two observers in
   orange keep level with the play on the sidelines. Substitutes watch from the far sideline, in front of the
   boards, tents and a full stand. The White team is mostly East Asian players, the Maroon team mixed. They run,
   jog, backpedal, shuffle sideways and idle from motion capture, with their planted feet held still by foot
   locking, blended by each player's speed and direction, face the way they run or the disc, and carry the disc in
   the throwing hand. Each throw winds up before the disc leaves the hand: two captured backhands, and a forehand
-  and a hammer keyed by hand.
+  and a hammer keyed by hand, and the lefty forehand (the forehand mirrored).
 
 ## Layout
 
