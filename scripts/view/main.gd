@@ -30,6 +30,7 @@ const LINE := Color(0.95, 0.95, 0.92)
 
 var sim: UltimateMatch
 var bodies: Array = [[], []]       # Athlete per player
+var subs: Array = []               # Athlete per substitute
 var observers: Array = []          # [Athlete, PlayerState] per sideline: they walk level with the disc
 var windups_drawn := 0             # wind-ups (throws and pulls) the athletes have animated
 var tags: Array = [[], []]         # Label3D per player
@@ -69,6 +70,9 @@ func _ready() -> void:
 	sim = UltimateMatch.new(seed_value, -1 if autoplay else 0)
 	_build_world()
 	_build_field()
+	var stadium := Stadium.new()
+	add_child(stadium)
+	stadium.build()
 	_build_players()
 	_build_hud()
 
@@ -232,6 +236,17 @@ func _build_field() -> void:
 
 
 func _build_players() -> void:
+	# The substitutes: seven a team in their area on the far sideline, either side of midfield, watching.
+	var sub_numbers := [[1, 3, 8, 11, 15, 19, 27], [6, 10, 13, 20, 22, 33, 50]]
+	for t in 2:
+		for i in sub_numbers[t].size():
+			var s := Athlete.new()
+			add_child(s)
+			s.setup(Athlete.ROSTERS[t][(i + 3) % Athlete.ROSTERS[t].size()], KITS[t], sub_numbers[t][i])
+			var x: float = (-24.0 if t == 0 else 8.0) + i * 2.4 + randf_range(-0.4, 0.4)
+			s.position = Vector3(x, 0, Stadium.SIDE * (Field.HALF_W + Stadium.TEAM_AREA + randf_range(-0.6, 0.9)))
+			s.rotation.y = 0.0 if Stadium.SIDE < 0.0 else PI          # facing the field
+			subs.append(s)
 	for k in 2:
 		var o := Athlete.new()
 		add_child(o)
