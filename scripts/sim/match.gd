@@ -16,7 +16,8 @@ const LAYOUT_REACH := 2.4      # m: a full-length dive
 const LAYOUT_TOP := 1.0        # m: a layout is for a low disc
 const LAYOUT_CHANCE := 0.05    # per tick (120 Hz) while it is in reach
 const BID_REACH := 1.6         # m: the intended receiver stretching (a step and a reach) for a disc flying past
-const BID_CHANCE := 0.08       # per tick while it is in that reach, at a catchable height
+const BID_CHANCE := 0.2        # per tick while it is in that reach, at a catchable height (about 95% for a disc
+                               # passing 1.3 m away at 15 m/s)
 const REACT := 0.35            # s: a defender's reaction to a cut or a throw
 const HAND_BLOCK := 0.25       # a break throw past a close mark: the marker's chance of a hand on it
 const DROP := 0.03             # a catchable disc dropped (about one catch in thirty)
@@ -73,7 +74,12 @@ var thrower: PlayerState       # the last thrower (cannot catch their own throw)
 var receiver: PlayerState      # the intended receiver of the throw in the air
 var release: ThrowSolver.Release
 var look_again := 0.0          # s until the thrower looks again (after a throw held back for a defender in its path)
-var last_block := {}            # the last in-flight block, for tracing (_defended)
+var last_block := {}
+var last_miss := {}             # the last throw that came down uncaught, for tracing (tests/probe_blocks.gd)
+var recv_closest := 1e9         # the receiver's closest approach to the disc in flight, at a catchable height (m)
+var recv_closest_at := []      # [disc height, flight time, receiver's speed, disc's speed] there
+var aim_spot := Vector3.ZERO
+var last_aim := {}    # where the throw was aimed (crossing catch height)            # the last in-flight block, for tracing (_defended)
 var is_pull := false
 var last_in := Vector3.ZERO    # the disc's last in-bounds spot over the ground (out-of-bounds restarts)
 var stall := 0.0
@@ -299,6 +305,9 @@ func _release(p: PlayerState, r: ThrowSolver.Release, to: PlayerState) -> void:
 	receiver = to
 	holder = null
 	last_in = Vector3(disc.pos.x, 0, disc.pos.z)
+	recv_closest = 1e9
+	recv_closest_at = [0.0, 0.0, 0.0, 0.0]
+	aim_spot = Vector3(r.arrival.x, 0, r.arrival.z)
 	stall = 0.0
 	stall_called = 0
 
@@ -382,6 +391,7 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	var yaw_err := rng.randfn(0.0, deg_to_rad(1.0) * pressure)
 	var speed_err := 1.0 + rng.randfn(0.0, 0.015 * pressure)
 	var aimed := r.arrival.distance_to(holder.pos)          # the throw's length to its target (for the stats)
+	var aimed_at := Vector3(r.arrival.x, 0, r.arrival.z)
 	var s := r.state
 	s.turn(yaw_err)
 	s.vel *= speed_err
@@ -390,6 +400,9 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	var who := holder
 	release = r
 	_release(who, r, to)
+	aim_spot = aimed_at
+	if to != null:
+		last_aim = {"recv_d": to.pos.distance_to(aimed_at), "recv_v": to.vel.length(), "flight": r.flight_time}
 	stats.throws += 1
 	stats["throws%d" % offence] = stats.get("throws%d" % offence, 0) + 1
 	stats["k%d_%s" % [offence, r.kind]] = stats.get("k%d_%s" % [offence, r.kind], 0) + 1
@@ -482,6 +495,11 @@ func _fly(dt: float) -> void:
 	DiscFlight.step(disc, dt, wind)
 	if Field.in_bounds(disc.pos):
 		last_in = Vector3(disc.pos.x, 0, disc.pos.z)
+	if receiver != null and disc.pos.y < CATCH_TOP and disc.time > 0.25:
+		var rd := Vector2(receiver.pos.x - disc.pos.x, receiver.pos.z - disc.pos.z).length()
+		if rd < recv_closest:
+			recv_closest = rd
+			recv_closest_at = [disc.pos.y, disc.time, receiver.vel.length(), disc.vel.length()]
 	# Catches and blocks: the offence wins a simultaneous catch.
 	if disc.time > 0.25 and disc.pos.y < CATCH_TOP and disc.pos.y > 0.05:
 		var off_c := _catcher(offence)
@@ -602,6 +620,10 @@ func _grounded(prev: Vector3) -> void:
 		disc.vel = Vector3.ZERO
 		_pickup_by(offence, spot)
 		return
+	last_miss = {"out": not Field.in_bounds(spot), "recv_closest": recv_closest, "kind": release.kind if release else "",
+			"aim_len": thrower.pos.distance_to(aim_spot) if thrower else 0.0, "aim_in": Field.in_bounds(aim_spot),
+			"aim_edge": Field.HALF_W - absf(aim_spot.z), "past": (spot - aim_spot).length(), "time": disc.time,
+			"wind": wind.length(), "at": recv_closest_at, "aim": last_aim.duplicate()}
 	if not Field.in_bounds(spot):
 		_turnover(Field.restart_point(last_in), "out of bounds")
 	else:
@@ -856,6 +878,16 @@ func _ai_throw() -> void:
 			var r2 := ThrowSolver.solve_auto(holder.pos, lead, kind)
 			if r2.reachable:
 				r = r2
+	# The receiver must get to where the throw crosses catch height by the time it does (traced: short passes to a
+	# fast cutter, thrown at 17-19 m/s, got there 0.3 s after release with the receiver still 3-5 m away, and flew
+	# on out of bounds). If not, wait for a better look unless the count is late. Against a person defence only:
+	# against a zone the receivers mostly stand in holes and out of bounds is rare.
+	var meet := Vector3(r.arrival.x, 0, r.arrival.z)
+	var r_meet := best.pos.distance_to(meet) / (best.speed * 0.85) + 0.45
+	if not zone and stall < 7.0 and r_meet > float(WINDUP.get(kind, 0.35)) + r.flight_time - float(tune.late):
+		stats["late_waits"] = stats.get("late_waits", 0) + 1
+		look_again = LOOK_AGAIN
+		return
 	# Against a person defence, look along the throw's real flight (it curves, and it is led): if a defender is in
 	# its low stretch, wait for a better look unless the count is late.
 	if not zone and stall < 7.0 and not path_open(holder.pos, r, float(WINDUP.get(kind, 0.35))):
