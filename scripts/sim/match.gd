@@ -101,6 +101,7 @@ var last_miss := {}             # the last throw that came down uncaught, for tr
 var recv_closest := 1e9         # the receiver's closest approach to the disc in flight, at a catchable height (m)
 var recv_closest_at := []      # [disc height, flight time, receiver's speed, disc's speed] there
 var aim_spot := Vector3.ZERO
+var last_band := ""      # the last throw's length band ("short", "medium", "long"), for the caught stats
 var last_aim := {}    # where the throw was aimed (crossing catch height)            # the last in-flight block, for tracing (_defended)
 var is_pull := false
 var last_in := Vector3.ZERO    # the disc's last in-bounds spot over the ground (out-of-bounds restarts)
@@ -480,6 +481,7 @@ func _throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	stats["k%d_%s" % [offence, r.kind]] = stats.get("k%d_%s" % [offence, r.kind], 0) + 1
 	var band := "len%d_%s" % [offence, "short" if aimed < 15.0 else ("medium" if aimed < 30.0 else "long")]
 	stats[band] = stats.get(band, 0) + 1
+	last_band = band
 	stats["hold%d" % offence] = stats.get("hold%d" % offence, 0.0) + hold_time
 	if defence[1 - offence] == "zone":
 		# Against a zone the danger is throwing through the cup: a throw that passes a cup defender within reach,
@@ -572,7 +574,7 @@ func _fly(dt: float) -> void:
 		if rd < recv_closest:
 			recv_closest = rd
 			recv_closest_at = [disc.pos.y, disc.time, receiver.vel.length(), disc.vel.length()]
-	# Catches and blocks: the offence wins a simultaneous catch.
+	# Catches and blocks.
 	if disc.time > 0.25 and disc.pos.y < CATCH_TOP and disc.pos.y > 0.05:
 		var off_c := _catcher(offence)
 		var def_c: PlayerState = null if is_pull else _catcher(1 - offence)
@@ -591,6 +593,10 @@ func _fly(dt: float) -> void:
 			if def_c != null and off_c == null:
 				layouts += 1
 				layout_by = def_c
+		# Both within reach: the one nearer the disc has it (a defender under a floating huck first, goal side, takes
+		# it away: the 2026 semifinal's deep blocks and interceptions); otherwise the offence's catch.
+		if off_c != null and def_c != null and _flat_d(def_c) < _flat_d(off_c):
+			off_c = null
 		if off_c != null:
 			_caught(off_c)
 			return
@@ -600,6 +606,10 @@ func _fly(dt: float) -> void:
 	if disc.pos.y <= 0.0:
 		disc.pos.y = 0.0
 		_grounded(prev)
+
+
+func _flat_d(p: PlayerState) -> float:
+	return Vector2(p.pos.x - disc.pos.x, p.pos.z - disc.pos.z).length()
 
 
 ## A dive for a disc out of reach: within LAYOUT_REACH, low, coming down; a chance per tick.
@@ -647,6 +657,8 @@ func _caught(p: PlayerState) -> void:
 	if not Field.in_bounds(p.pos):
 		_turnover(Field.restart_point(p.pos), "caught out of bounds")
 		return
+	if not is_pull:
+		stats["caught_" + last_band] = stats.get("caught_" + last_band, 0) + 1   # e.g. caught_len0_long
 	if is_pull:
 		is_pull = false
 		say("%s #%d catches the pull" % [names[offence], p.number])

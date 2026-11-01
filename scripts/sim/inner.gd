@@ -23,6 +23,9 @@ const BUFFER := 0.7            # how much of the stirring a fully Self-led playe
 const BLEND_AT := 0.35         # nerves past this, with Self not holding them, and a protector takes over
 const SUB_ACUTE_FIRE := 0.3    # her firefighter lean's weight below acute pressure
 const ACUTE := 0.9             # pressure past this brings the firefighter whoever she is
+const FIRE_FROM := 0.45        # from this pressure (the opening of a big game, a game point) her firefighter comes
+                               # forward, more as it rises towards ACUTE (the 2026 semifinal's hucks: 1.5 a point
+                               # in the opening four, 0.25 in the middle, three in the trailing side's game point)
 const OWN_ERROR := 0.25        # nerves added by a mistake of her own (a drop, a throw away)
 const TOUCH := 0.06            # nerves eased by a completed throw or catch
 const HUDDLE := 0.5            # the share of nerves left after the huddle between points
@@ -57,9 +60,11 @@ func update(dt: float, p: float) -> void:
 	var settle := SETTLE * (1.0 + CALMING * calm_near)
 	nerves = move_toward(nerves, stirred, (RISE if stirred > nerves else settle) * dt)
 	var over := clampf((nerves - BLEND_AT) / (1.0 - BLEND_AT), 0.0, 1.0)
-	# Below acute pressure the careful manager mostly steps in (in the 2025 final nobody chanced a huck until
-	# universe point: the opening's nerves showed as bad throws and drops); at acute pressure the firefighter.
-	var lean := 1.0 if p >= ACUTE else firefighter_lean * SUB_ACUTE_FIRE
+	# At ordinary pressure the careful manager mostly steps in; from FIRE_FROM the firefighter comes forward, and at
+	# acute pressure (universe point) she is the one. Counted in the 2026 semifinal's footage: the opening points
+	# had the most hucks, the middle few.
+	var fire_t := clampf((p - FIRE_FROM) / (ACUTE - FIRE_FROM), 0.0, 1.0)
+	var lean := lerpf(firefighter_lean * SUB_ACUTE_FIRE, 1.0, fire_t)
 	firefighter = over * lean
 	manager = over * (1.0 - lean)
 
