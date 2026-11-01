@@ -31,7 +31,7 @@ You play White.
   tighter camera on the sideline that follows the disc; or behind the play at head height.
 - `I` shows or hides the player card: the disc holder's (or your player's) Self, nerves and whether a protector
   has taken over. The HUD names the moment (the opening, game point, universe point); `--score=14,14` starts at
-  universe point.
+  universe point; `--stakes=0.5` makes it pool play instead of a final.
 - `L` switches the light: a clear midday or a low late-afternoon sun with long shadows (`--light=late` starts
   with it).
 - `F1` toggles autoplay. `Esc` quits.
@@ -69,7 +69,7 @@ You play White.
   bear the tension. The game is a final: the pressure is highest in the opening points and at universe point,
   lowest mid-game. Nerves shake throws and loosen catches; a blended manager plays it safe; a blended firefighter
   hurries and throws the huck nobody tried all game. A mistake stirs her nerves; a completed pass, a goal and the
-  huddle between points settle them. It shows: stirred nerves raise the shoulders and quicken the breath, and after
+  huddle between points settle them, and a calm team-mate close by helps her settle. It shows: stirred nerves raise the shoulders and quicken the breath, and after
   her own mistake a player's head drops for a moment.
 
 - **The players:** women athletes with skeletons, in jerseys and shorts tinted to the team (White and Maroon),

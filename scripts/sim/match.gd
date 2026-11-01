@@ -33,7 +33,9 @@ const UNIVERSE := 0.75         # both a point from winning
 const GAME_POINT := 0.45
 const CLOSE_LATE := 0.3        # within a point of each other in the last few points
 const STALL_PRESSURE := 0.25   # the holder's own, by the end of the count
-const HUCK_URGE := 8.0         # a blended firefighter's pull towards the long throw (the AI's score, per unit blend)
+const DEEP_SPACE := 12.0       # m past a runner: where a blended firefighter puts up the huck, hoping
+const HOPE := 6.0             # s of lateness a fully blended firefighter accepts on a huck, per unit blend
+const HUCK_URGE := 16.0         # a blended firefighter's pull towards the long throw (the AI's score, per unit blend)
 const CATCH_TOP := 2.7         # m: the highest catch, jumping
 const MARK_DIST := 1.6         # m: the marker stands this far from the thrower (disc space)
 const COUNT_RANGE := 3.0       # m: the marker counts only within this distance
@@ -106,7 +108,7 @@ var wind_base := Vector3.ZERO      # the steady wind (ULT_WIND="speed,direction 
 var tune := {"margin": 0.5, "react": REACT, "def_chance": DEF_CHANCE, "def_reach": DEF_REACH,
 		"hand_block": HAND_BLOCK, "break_penalty": 2.0, "late": -0.15, "swing": 4.0, "lean": 0.0, "goal_side": 2.5,
 		"zone_swing": 2.0, "swing_margin": 0.15, "cup_block": 0.45,
-		"zone_area": 7.0, "zone_shade": 0.4, "zone_hand": 0.5, "lane_penalty": 3.0}   # the AI's knobs; ULT_TUNE (JSON) overrides them
+		"zone_area": 7.0, "zone_shade": 0.4, "zone_hand": 0.5, "lane_penalty": 3.0, "huck_urge": HUCK_URGE}   # the AI's knobs; ULT_TUNE (JSON) overrides them
 ## Each team's defence: "person" (person to person) or "zone" (a cup of three round the thrower, a middle, two
 ## wings and a deep; common in the women's game: the PO's semifinal recording is a zone throughout). Maroon plays
 ## zone by default; ULT_DEFENCE="person,zone" (White, Maroon) overrides.
@@ -209,8 +211,11 @@ func pulling_team() -> int:
 func start_point(puller: int) -> void:
 	offence = 1 - puller
 	for t in 2:
+		var team_self := 0.0
 		for q: PlayerState in teams[t]:
-			q.inner.huddle()                          # the huddle between points
+			team_self += q.inner.self_energy / PLAYERS
+		for q: PlayerState in teams[t]:
+			q.inner.huddle(team_self)                 # the huddle between points
 	for t in 2:
 		if defence_call[t] != "":
 			defence[t] = defence_call[t]
@@ -284,6 +289,11 @@ func step(dt: float = DT) -> void:
 	for t in 2:
 		for q: PlayerState in teams[t]:
 			var own := STALL_PRESSURE * stall / 10.0 if q == holder else 0.0
+			var calm := 0.0
+			for o: PlayerState in teams[t]:
+				if o != q and o.inner.nerves < 0.2 and o.pos.distance_to(q.pos) < Inner.CALM_NEAR:
+					calm = maxf(calm, o.inner.self_energy)
+			q.inner.calm_near = calm
 			q.inner.update(dt, clampf(mp + own, 0.0, 1.0))
 	phase_time += dt
 	match phase:
@@ -849,7 +859,8 @@ func _ai_throw() -> void:
 	for p: PlayerState in teams[offence]:
 		if p == holder:
 			continue
-		for into_space in [false, true]:
+		# Where to put it: the runner, the space a step past her, and (a firefighter's hope) the deep space well past.
+		for space in ([0.0, 4.0, DEEP_SPACE] if hurried else [0.0, 4.0]):
 			var spot := p.pos
 			var t := 0.8 + w
 			for _k in 2:
@@ -859,8 +870,7 @@ func _ai_throw() -> void:
 				var ahead := Vector3.ZERO
 				if to_goal.length() > 0.1:
 					ahead = to_goal.normalized() * minf(to_goal.length(), maxf(p.vel.length(), 2.0) * t)
-				if into_space:
-					ahead += Vector3(d * 4.0, 0, 0)
+				ahead += Vector3(d * float(space), 0, 0)
 				spot = p.pos + ahead
 				spot = Vector3(clampf(spot.x, -Field.HALF_L + 1.0, Field.HALF_L - 1.0), 0,
 						clampf(spot.z, -Field.HALF_W + 1.5, Field.HALF_W - 1.5))
@@ -894,15 +904,17 @@ func _ai_throw() -> void:
 				safe_margin = margin
 				safe = p
 				safe_spot = spot
-			if r_t > t + float(tune.late) + (3.0 * fire if dist >= 30.0 else 0.0):
+			if r_t > t + float(tune.late) + (HOPE * fire if dist >= 30.0 else 0.0):
 				continue                                      # they would not get there in time (a firefighter
 				                                              # throws the huck anyway: a hope, not a read)
 			var progress := (spot.x - holder.pos.x) * d
 			var wind_cost := WIND_RISK * wind_base.length() * maxf(t - w, 0.0)     # floaty throws in wind
-			var sc := clampf(margin, -2.0, 2.0) * 3.0 + 0.06 * (1.0 - 0.6 * mgr) * progress \
+			# A firefighter does not weigh the read: the margin counts for less as she blends.
+			var sc := clampf(margin, -2.0, 2.0) * 3.0 * (1.0 - minf(1.0, 2.0 * fire)) \
+					+ 0.06 * (1.0 - 0.6 * mgr) * progress \
 					- (1.0 if dist > 40.0 else 0.0) - wind_cost
 			if dist >= 30.0:
-				sc += HUCK_URGE * fire                          # the firefighter's huck
+				sc += float(tune.huck_urge) * fire              # the firefighter's huck
 			if blocked:
 				# Throw to the open side (round the cup) if you can; a high release over the mark halves the cost.
 				sc -= float(tune.break_penalty) * (0.5 if cand_kind in ["high", "lefty"] else 1.0) * (1.0 + mgr)

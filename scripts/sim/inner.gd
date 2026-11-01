@@ -25,6 +25,8 @@ const ACUTE := 0.8             # pressure past this brings the firefighter whoev
 const OWN_ERROR := 0.25        # nerves added by a mistake of her own (a drop, a throw away)
 const TOUCH := 0.06            # nerves eased by a completed throw or catch
 const HUDDLE := 0.5            # the share of nerves left after the huddle between points
+const CALMING := 2.0           # how much faster nerves settle with a fully Self-led team-mate close by
+const CALM_NEAR := 8.0         # m: close enough for a team-mate's calm to reach her (a word, a look, a hand)
 const SLUMP := 1.6             # s: how long her head is down after a mistake of her own (the view)
 
 var self_energy := 0.7
@@ -35,6 +37,7 @@ var manager := 0.0
 var firefighter := 0.0
 var pressure := 0.0            # the last pressure the match set
 var slump_left := 0.0          # s left of the moment after her own mistake
+var calm_near := 0.0           # the Self-energy of the calmest team-mate close by (the match sets it), 0 if none
 
 
 func _init(rng: RandomNumberGenerator) -> void:
@@ -49,7 +52,9 @@ func update(dt: float, p: float) -> void:
 	pressure = p
 	slump_left = maxf(0.0, slump_left - dt)
 	var stirred := clampf(p * sensitivity * (1.0 - BUFFER * self_energy), 0.0, 1.0)
-	nerves = move_toward(nerves, stirred, (RISE if stirred > nerves else SETTLE) * dt)
+	# Co-regulation: a calm team-mate close by helps her settle (Self to Self).
+	var settle := SETTLE * (1.0 + CALMING * calm_near)
+	nerves = move_toward(nerves, stirred, (RISE if stirred > nerves else settle) * dt)
 	var over := clampf((nerves - BLEND_AT) / (1.0 - BLEND_AT), 0.0, 1.0)
 	var lean := 1.0 if p >= ACUTE else firefighter_lean
 	firefighter = over * lean
@@ -70,8 +75,9 @@ func touch() -> void:
 	nerves = maxf(0.0, nerves - TOUCH)
 
 
-func huddle() -> void:
-	nerves *= HUDDLE
+## The huddle between points: it settles her as far as the team in it is Self-led (`team_self`, the mean).
+func huddle(team_self: float = 1.0) -> void:
+	nerves *= lerpf(1.0, HUDDLE, clampf(team_self / 0.7, 0.0, 1.0))
 
 
 ## How shaky her hands are now: 1 Self-led, more as the exile is stirred.

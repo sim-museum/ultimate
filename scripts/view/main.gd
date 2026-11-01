@@ -11,7 +11,7 @@ extends Node3D
 ## teams AI). Esc: quit.
 ##
 ## Command line (after --): --autoplay, --seed=N, --wind=speed[,degrees], --light=day|late, --score=W,M (start there:
-## 14,14 is universe point), --screenshot=path.png [--frames=N], --cam=field|tower|sideline|close
+## 14,14 is universe point), --stakes=0-1 (how much the game means: 0.95 a final, 0.5 pool play), --screenshot=path.png [--frames=N], --cam=field|tower|sideline|close
 
 ## The kits: White (navy shorts and undershirts, navy numbers) and Maroon (black shorts and undershirts, white numbers).
 const KITS := [
@@ -60,6 +60,7 @@ var kind := "backhand"
 var high := false                  # backhands and forehands released high, over the mark
 var wind_arg := ""                 # --wind=speed[,direction degrees]
 var score_arg := ""                # --score=W,M
+var stakes_arg := ""               # --stakes=0-1 (0.95, a final, by default)
 var light := "day"                 # a key into LIGHTS; L switches
 var sun: DirectionalLight3D
 var sky_mat: ProceduralSkyMaterial
@@ -81,6 +82,8 @@ func _ready() -> void:
 			autoplay = true
 		elif a.begins_with("--seed="):
 			seed_value = int(a.split("=")[1])
+		elif a.begins_with("--stakes="):
+			stakes_arg = a.get_slice("=", 1)
 		elif a.begins_with("--score="):
 			score_arg = a.get_slice("=", 1)
 		elif a.begins_with("--light="):
@@ -95,6 +98,8 @@ func _ready() -> void:
 			var c := a.split("=")[1]
 			cam_mode = 3 if c == "close" else maxi(0, CAMERAS.find(c))
 	sim = UltimateMatch.new(seed_value, -1 if autoplay else 0)
+	if stakes_arg != "":
+		sim.stakes = float(stakes_arg)
 	if score_arg != "":
 		var sp := score_arg.split(",")
 		sim.score = [int(sp[0]), int(sp[1]) if sp.size() > 1 else int(sp[0])]
