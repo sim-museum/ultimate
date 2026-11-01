@@ -36,6 +36,10 @@ const STALL_PRESSURE := 0.25   # the holder's own, by the end of the count, from
 const STALL_FELT := 6.0        # more of a high stall count hail mary")
 const DEEP_SPACE := 12.0       # m past a runner: where a blended firefighter puts up the huck, hoping
 const HOPE := 6.0             # s of lateness a fully blended firefighter accepts on a huck, per unit blend
+## A huck is a throw aimed 30 m or more (the stats' "long" band, `last_band`). On one, the receiver and her defender
+## run for where it comes down, and her team-mates leave it to her: in the 2026 semifinal's footage the two sprint
+## downfield all through a huck's flight (3.5-4.6 s for 35-45 m) and it comes down on them at the far end (caught,
+## bid, laid out: 3 of 3 measured).
 const HUCK_URGE := 16.0         # a blended firefighter's pull towards the long throw (the AI's score, per unit blend)
 const CATCH_TOP := 2.7         # m: the highest catch, jumping
 const MARK_DIST := 1.6         # m: the marker stands this far from the thrower (disc space)
@@ -551,6 +555,8 @@ func through_cup(from: Vector3, spot: Vector3) -> bool:
 func _catch_spot(p: PlayerState, r: ThrowSolver.Release) -> Vector3:
 	var now := disc.time if phase in [Phase.FLIGHT, Phase.PULL] else 0.0
 	var start_lag := 0.3 * (1.0 - clampf(p.vel.length() / p.speed, 0.0, 1.0))
+	if not is_pull and last_band.ends_with("long"):
+		return Vector3(r.arrival.x, 0, r.arrival.z)            # a huck (aimed 30 m or more): where it comes down
 	for e in r.path:
 		var t: float = e[0] - now
 		var q: Vector3 = e[1]
@@ -614,9 +620,12 @@ func _flat_d(p: PlayerState) -> float:
 
 ## A dive for a disc out of reach: within LAYOUT_REACH, low, coming down; a chance per tick.
 func _layout(t: int, chance: float) -> PlayerState:
+	var huck := not is_pull and release != null and receiver != null and last_band.ends_with("long")
 	for p: PlayerState in teams[t]:
 		if p == thrower and not is_pull:
 			continue
+		if huck and t == offence and p != receiver:
+			continue                           # a huck is hers (_catcher)
 		var d := Vector2(p.pos.x - disc.pos.x, p.pos.z - disc.pos.z).length()
 		if d < LAYOUT_REACH and rng.randf() < chance:
 			return p
@@ -629,9 +638,12 @@ func _catcher(t: int) -> PlayerState:
 	var best: PlayerState = null
 	var on_d := t != offence
 	var best_d: float = tune.def_reach if on_d else REACH
+	var huck := not is_pull and release != null and receiver != null and last_band.ends_with("long")
 	for p: PlayerState in teams[t]:
 		if p == thrower and not is_pull:
 			continue
+		if huck and not on_d and p != receiver:
+			continue                           # a huck is hers: team-mates do not take it on its way (the footage)
 		var d := Vector2(p.pos.x - disc.pos.x, p.pos.z - disc.pos.z).length()
 		var sure := DEF_SURE if on_d else 0.6
 		var chance: float = tune.def_chance if on_d else 0.35
