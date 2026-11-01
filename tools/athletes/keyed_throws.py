@@ -105,8 +105,9 @@ CATCH = {
 THROWS["catch"] = CATCH
 
 # The layout (ULTIMATE-2): a full-length dive for a disc out of reach. A push off the right foot, the body flat out
-# along the ground with both arms reaching ahead (the "release" here is the catch, at full stretch), landing on the
-# chest and thighs, then a push back up to the knees. Whole body (the game plays it in place of the run).
+# along the ground with the right arm reaching ahead (the "release" here is the catch, at full stretch) and the left
+# trailing along the body (the 2026 final's replays: layouts are mostly one-handed), landing on the chest and thighs,
+# then a push back up to the knees. Whole body (the game plays it in place of the run).
 LAYOUT = {
     "release": 0.35,
     "keys": [
@@ -118,13 +119,13 @@ LAYOUT = {
                 "rfoot": (0.12, -0.10, None), "lfoot": (-0.12, 0.35, 0.25)}),
         (0.35, {"hips": {"drop": 0.62, "shift": (0.0, 0.85), "lean": 82.0},
                 "spine": {"bend": 6.0},
-                "rhand": (0.14, 2.45, 0.55), "lhand": (-0.14, 2.45, 0.55),
+                "rhand": (0.10, 2.50, 0.55), "lhand": (-0.32, 0.95, 0.45), "lelbow": (-0.8, 0.0, -0.6),
                 "rfoot": (0.12, -0.30, 0.45), "lfoot": (-0.15, -0.10, 0.40)}),
         (0.60, {"hips": {"drop": 0.80, "shift": (0.0, 1.05), "lean": 88.0},
-                "rhand": (0.16, 2.50, 0.16), "lhand": (-0.16, 2.50, 0.16),
+                "rhand": (0.12, 2.55, 0.16), "lhand": (-0.32, 1.00, 0.14),
                 "rfoot": (0.12, -0.25, 0.10), "lfoot": (-0.15, -0.20, 0.10)}),
         (1.00, {"hips": {"drop": 0.80, "shift": (0.0, 1.05), "lean": 88.0},
-                "rhand": (0.22, 2.30, 0.12), "lhand": (-0.22, 2.30, 0.12)}),
+                "rhand": (0.20, 2.35, 0.12), "lhand": (-0.30, 1.20, 0.12)}),
         (1.50, {"hips": {"drop": 0.45, "shift": (0.0, 0.90), "lean": 20.0},
                 "spine": {"bend": 15.0},
                 "rhand": (0.25, 1.10, 0.75), "lhand": (-0.25, 1.10, 0.75),

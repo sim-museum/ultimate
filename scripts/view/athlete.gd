@@ -55,6 +55,7 @@ var throwing := ""              # the throw clip last started
 var throw_clock := 0.0          # where that clip is now (s)
 var _run_speed := 1.0           # the fastest forward clip's own speed
 var stance := 0.0               # how far into the mark's stance (0-1)
+var dive_lock := 0.0            # s left of a layout: her heading is fixed toward the disc
 var catching := 0.0             # s since the catch clip started (large: none)
 var _has_catch := false
 var _has_stance := false
@@ -242,6 +243,7 @@ func _add_numbers(number: int, kit: Dictionary) -> void:
 func update_from(p: PlayerState, look: Vector3, dt: float) -> void:
 	throw_clock += dt
 	catching += dt
+	dive_lock = maxf(0.0, dive_lock - dt)
 	position = Vector3(p.pos.x, 0.0, p.pos.z)
 	var v := Vector3(p.vel.x, 0.0, p.vel.z)
 	var speed := v.length()
@@ -255,7 +257,8 @@ func update_from(p: PlayerState, look: Vector3, dt: float) -> void:
 		elif speed > 0.3:
 			want = atan2(v.x, v.z)
 	var d := wrapf(want - yaw, -PI, PI)
-	yaw += clampf(d, -TURN_RATE * dt, TURN_RATE * dt)
+	if dive_lock <= 0.0:
+		yaw += clampf(d, -TURN_RATE * dt, TURN_RATE * dt)
 	rotation = Vector3(0.0, yaw, 0.0)
 	var f := Vector3(sin(yaw), 0.0, cos(yaw))
 	var r := Vector3(-cos(yaw), 0.0, sin(yaw))
@@ -302,6 +305,17 @@ func start_catch(lead: float) -> void:
 	tree.set("parameters/catch_seek/seek_request", maxf(0.0, rel - lead))
 	tree.set("parameters/catch/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 	catching = 0.0
+
+
+## A layout: she leaves her feet toward the disc (the 2026 final's replays: a defender dives across, toward the
+## disc, not the way she was running) and keeps that heading through the dive.
+func dive_toward(target: Vector3, lead: float) -> void:
+	var to := Vector3(target.x - global_position.x, 0.0, target.z - global_position.z)
+	if to.length() > 0.1:
+		yaw = atan2(to.x, to.z)
+		rotation = Vector3(0.0, yaw, 0.0)
+	dive_lock = float(clips()["clips"]["layout"]["length"]) if clips()["clips"].has("layout") else 1.5
+	start_throw("layout", lead)
 
 
 ## When the receiver of the disc in flight should start her catch (the view, each frame): the seconds until the

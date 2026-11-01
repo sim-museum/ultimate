@@ -420,7 +420,7 @@ func _update_players(delta: float) -> void:
 	windups_drawn = sim.windups
 	# A layout: the sim decides it at the catch (or the block), so the dive starts just before its full stretch.
 	if sim.layouts != layouts_drawn and sim.layout_by != null:
-		(bodies[sim.layout_by.team][sim.layout_by.idx] as Athlete).start_throw("layout", LAYOUT_LEAD)
+		(bodies[sim.layout_by.team][sim.layout_by.idx] as Athlete).dive_toward(sim.disc.pos, LAYOUT_LEAD)
 	layouts_drawn = sim.layouts
 	# The receiver's catch: started as the disc comes within the clip's lead-in, once a throw.
 	var cl := Athlete.catch_lead(sim)
