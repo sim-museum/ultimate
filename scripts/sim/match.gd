@@ -32,7 +32,8 @@ const OPENING_POINTS := 4.0
 const UNIVERSE := 0.75         # both a point from winning
 const GAME_POINT := 0.45
 const CLOSE_LATE := 0.3        # within a point of each other in the last few points
-const STALL_PRESSURE := 0.25   # the holder's own, by the end of the count
+const STALL_PRESSURE := 0.25   # the holder's own, by the end of the count, from STALL_FELT on (PO: "a huck is
+const STALL_FELT := 6.0        # more of a high stall count hail mary")
 const DEEP_SPACE := 12.0       # m past a runner: where a blended firefighter puts up the huck, hoping
 const HOPE := 6.0             # s of lateness a fully blended firefighter accepts on a huck, per unit blend
 const HUCK_URGE := 16.0         # a blended firefighter's pull towards the long throw (the AI's score, per unit blend)
@@ -290,7 +291,7 @@ func step(dt: float = DT) -> void:
 	var mp := moment_pressure()
 	for t in 2:
 		for q: PlayerState in teams[t]:
-			var own := STALL_PRESSURE * stall / 10.0 if q == holder else 0.0
+			var own := STALL_PRESSURE * maxf(stall - STALL_FELT, 0.0) / (10.0 - STALL_FELT) if q == holder else 0.0
 			var calm := 0.0
 			for o: PlayerState in teams[t]:
 				if o != q and o.inner.nerves < 0.2 and o.pos.distance_to(q.pos) < Inner.CALM_NEAR:
@@ -1155,7 +1156,9 @@ func _offence_goal(p: PlayerState, dt: float) -> void:
 	match p.role:
 		"stack":
 			p.goal = _stack_spot(p, base, d)
-			if p.timer <= 0.0 and holder != null and _cutters() < 2:
+			# A player blended with her firefighter does not wait her turn in the stack (ULTIMATE-6).
+			var eager := p.inner.firefighter > 0.1
+			if (p.timer <= 0.0 or eager) and holder != null and _cutters() < (3 if eager else 2):
 				p.role = "cut"
 				p.timer = rng.randf_range(1.8, 2.6)
 				# Deep three times in ten; a cutter blended with her firefighter goes deep (ULTIMATE-6: at universe

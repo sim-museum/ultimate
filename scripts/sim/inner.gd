@@ -21,7 +21,8 @@ const RISE := 1.5              # per s: how fast nerves rise towards what the mo
 const SETTLE := 0.08           # per s: how fast they settle when the moment eases
 const BUFFER := 0.7            # how much of the stirring a fully Self-led player holds (Self-energy 1)
 const BLEND_AT := 0.35         # nerves past this, with Self not holding them, and a protector takes over
-const ACUTE := 0.8             # pressure past this brings the firefighter whoever she is
+const SUB_ACUTE_FIRE := 0.3    # her firefighter lean's weight below acute pressure
+const ACUTE := 0.9             # pressure past this brings the firefighter whoever she is
 const OWN_ERROR := 0.25        # nerves added by a mistake of her own (a drop, a throw away)
 const TOUCH := 0.06            # nerves eased by a completed throw or catch
 const HUDDLE := 0.5            # the share of nerves left after the huddle between points
@@ -56,7 +57,9 @@ func update(dt: float, p: float) -> void:
 	var settle := SETTLE * (1.0 + CALMING * calm_near)
 	nerves = move_toward(nerves, stirred, (RISE if stirred > nerves else settle) * dt)
 	var over := clampf((nerves - BLEND_AT) / (1.0 - BLEND_AT), 0.0, 1.0)
-	var lean := 1.0 if p >= ACUTE else firefighter_lean
+	# Below acute pressure the careful manager mostly steps in (in the 2025 final nobody chanced a huck until
+	# universe point: the opening's nerves showed as bad throws and drops); at acute pressure the firefighter.
+	var lean := 1.0 if p >= ACUTE else firefighter_lean * SUB_ACUTE_FIRE
 	firefighter = over * lean
 	manager = over * (1.0 - lean)
 
