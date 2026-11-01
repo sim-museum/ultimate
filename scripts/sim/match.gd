@@ -869,7 +869,9 @@ func _ai_throw() -> void:
 				var to_goal := Vector3(p.goal.x - p.pos.x, 0, p.goal.z - p.pos.z)
 				var ahead := Vector3.ZERO
 				if to_goal.length() > 0.1:
-					ahead = to_goal.normalized() * minf(to_goal.length(), maxf(p.vel.length(), 2.0) * t)
+					# A cutter is getting up to speed: her pace is most of her top speed, not what it is this moment.
+					var pace := maxf(p.vel.length(), 0.8 * p.speed if p.role == "cut" else 2.0)
+					ahead = to_goal.normalized() * minf(to_goal.length(), pace * t)
 				ahead += Vector3(d * float(space), 0, 0)
 				spot = p.pos + ahead
 				spot = Vector3(clampf(spot.x, -Field.HALF_L + 1.0, Field.HALF_L - 1.0), 0,
@@ -1149,7 +1151,9 @@ func _offence_goal(p: PlayerState, dt: float) -> void:
 			if p.timer <= 0.0 and holder != null and _cutters() < 2:
 				p.role = "cut"
 				p.timer = rng.randf_range(1.8, 2.6)
-				var deep := rng.randf() < 0.3
+				# Deep three times in ten; a cutter blended with her firefighter goes deep (ULTIMATE-6: at universe
+				# point both teams went for the huck at once).
+				var deep := rng.randf() < 0.3 + 2.0 * p.inner.firefighter
 				var side := 1.0 if rng.randf() < 0.65 else -1.0     # mostly to the open side (away from the mark)
 				var ahead := rng.randf_range(28.0, 40.0) if deep else rng.randf_range(7.0, 15.0)
 				var x := clampf(base.x + d * ahead, -Field.HALF_L + 2.0, Field.HALF_L - 2.0)
