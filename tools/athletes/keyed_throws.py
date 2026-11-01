@@ -134,6 +134,92 @@ LAYOUT = {
 }
 THROWS["layout"] = LAYOUT
 
+# Releases at the heights of the game's own throws (ULTIMATE-7, the 2026 final's close-ups of marked handlers): the
+# high releases over the mark (at the shoulder to head, 1.5 m) and the breaks stepped out under the marker's arm,
+# released about knee height (0.55 m, wide of the body); and the fake (0.35-0.4 s, the disc whipped up beside the
+# head and back). Until now the high releases borrowed the hip-height backhand and forehand. Each release comes no
+# sooner than the sim's wind-up for the kind (match.gd WINDUP), so the clip can start in time.
+HOLD = {"rhand": (0.28, 0.18, 0.95), "relbow": (0.6, -0.6, -0.6)}
+IDLE_END = {"hips": {"drop": 0.0, "shift": (0.0, 0.0), "yaw": 0.0, "lean": 0.0},
+            "spine": {"twist": 0.0, "bend": 0.0, "side": 0.0},
+            "rfoot": "idle", "rhand": (0.28, 0.20, 0.98), "relbow": (0.6, -0.6, -0.6), "lhand": "idle", "lelbow": None}
+HIGH_FOREHAND = {
+    "release": 0.35,
+    "keys": [
+        (0.00, dict(HOLD)),
+        (0.05, dict(HOLD)),
+        (0.23, {"hips": {"drop": 0.02, "shift": (0.05, 0.0), "yaw": 20.0, "lean": 0.0},
+                "spine": {"twist": 18.0, "bend": 0.0, "side": -6.0},
+                "rhand": (0.45, -0.20, 1.50), "relbow": (0.7, -0.4, 0.3), "lhand": (-0.40, 0.10, 1.10)}),
+        (0.35, {"hips": {"yaw": 2.0}, "spine": {"twist": -4.0, "side": -8.0},
+                "rhand": (0.42, 0.40, 1.58), "relbow": (0.6, 0.0, 0.2)}),
+        (0.50, {"spine": {"twist": -16.0}, "rhand": (0.25, 0.70, 1.40), "relbow": (0.6, 0.3, -0.3)}),
+        (1.05, dict(IDLE_END)),
+    ],
+}
+HIGH_BACKHAND = {
+    "release": 0.45,
+    "keys": [
+        (0.00, dict(HOLD)),
+        (0.10, dict(HOLD)),
+        (0.30, {"hips": {"drop": 0.02, "shift": (-0.05, 0.0), "yaw": -25.0, "lean": 0.0},
+                "spine": {"twist": -30.0, "bend": 0.0, "side": 4.0},
+                "rhand": (-0.45, -0.05, 1.50), "relbow": (-0.3, 0.9, 0.3), "lhand": (-0.35, 0.25, 1.20)}),
+        (0.45, {"hips": {"yaw": 0.0}, "spine": {"twist": 0.0},
+                "rhand": (-0.30, 0.45, 1.58), "relbow": (0.5, 0.3, 0.6)}),
+        (0.60, {"spine": {"twist": 15.0}, "rhand": (0.25, 0.65, 1.40), "relbow": (0.6, 0.3, 0.0)}),
+        (1.15, dict(IDLE_END)),
+    ],
+}
+LOW_FOREHAND = {
+    "release": 0.40,
+    "keys": [
+        (0.00, dict(HOLD)),
+        (0.25, {"hips": {"drop": 0.30, "shift": (0.35, 0.05), "yaw": 25.0, "lean": 22.0},
+                "spine": {"twist": 18.0, "bend": 25.0, "side": 15.0},
+                "rfoot": (0.95, 0.20, None), "rhand": (0.75, -0.10, 0.58), "relbow": (0.3, -1.0, -0.3),
+                "lhand": (-0.45, 0.05, 0.85)}),
+        (0.40, {"hips": {"drop": 0.34, "shift": (0.42, 0.10), "yaw": 5.0, "lean": 24.0},
+                "spine": {"twist": -5.0, "bend": 28.0, "side": 20.0},
+                "rhand": (0.90, 0.45, 0.55), "relbow": (0.2, -0.3, -1.0)}),
+        (0.58, {"hips": {"drop": 0.28, "shift": (0.38, 0.12), "yaw": -8.0, "lean": 18.0},
+                "spine": {"twist": -15.0, "bend": 22.0, "side": 14.0},
+                "rhand": (0.70, 0.75, 0.70), "relbow": (0.5, 0.2, -1.0)}),
+        (1.20, dict(IDLE_END)),
+    ],
+}
+LOW_BACKHAND = {
+    "release": 0.40,
+    "keys": [
+        (0.00, dict(HOLD)),
+        (0.25, {"hips": {"drop": 0.30, "shift": (-0.35, 0.10), "yaw": -30.0, "lean": 22.0},
+                "spine": {"twist": -35.0, "bend": 25.0, "side": -15.0},
+                "rfoot": (-0.70, 0.45, None), "rhand": (-0.75, -0.15, 0.60), "relbow": (-0.3, 0.9, 0.0),
+                "lhand": (-0.20, -0.30, 0.90)}),
+        (0.40, {"hips": {"drop": 0.34, "shift": (-0.42, 0.15), "yaw": -10.0, "lean": 24.0},
+                "spine": {"twist": -10.0, "bend": 28.0, "side": -18.0},
+                "rhand": (-0.80, 0.45, 0.55), "relbow": (-0.6, 0.6, -0.4)}),
+        (0.58, {"hips": {"drop": 0.28, "shift": (-0.36, 0.15), "yaw": 5.0, "lean": 18.0},
+                "spine": {"twist": 10.0, "bend": 22.0, "side": -12.0},
+                "rhand": (-0.40, 0.80, 0.70), "relbow": (0.0, 0.6, -0.6)}),
+        (1.20, dict(IDLE_END)),
+    ],
+}
+FAKE = {
+    "release": 0.18,             # the top of the fake
+    "keys": [
+        (0.00, dict(HOLD)),
+        (0.18, {"hips": {"drop": 0.05, "shift": (0.05, 0.0), "yaw": 15.0, "lean": 0.0},
+                "spine": {"twist": 15.0, "bend": 0.0, "side": -4.0},
+                "rhand": (0.40, 0.05, 1.60), "relbow": (0.7, -0.3, 0.3), "lhand": (-0.35, 0.15, 1.00)}),
+        (0.40, {"hips": {"drop": 0.0, "shift": (0.0, 0.0), "yaw": 0.0, "lean": 0.0},
+                "spine": {"twist": 0.0, "bend": 0.0, "side": 0.0},
+                "rhand": (0.28, 0.18, 0.95), "relbow": (0.6, -0.6, -0.6), "lhand": "idle", "lelbow": None}),
+    ],
+}
+THROWS.update({"high_forehand": HIGH_FOREHAND, "high_backhand": HIGH_BACKHAND, "low_forehand": LOW_FOREHAND,
+               "low_backhand": LOW_BACKHAND, "fake": FAKE})
+
 
 def B(r, f, u):
     """Body frame (right, forward, up) to armature space (+X left, -Y forward, +Z up)."""

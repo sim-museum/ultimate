@@ -27,7 +27,11 @@ const THROW_CLIPS := {"backhand": ["backhand", "backhand2"], "pull": ["backhand"
 		# The new throws (ULTIMATE-3) on the nearest clip until they have their own: high releases and the cloud on
 		# the backhand or forehand, the blade on the backhand, the scoober (overhead) on the hammer, the push on the
 		# forehand.
-		"high_backhand": ["backhand", "backhand2"], "high_forehand": ["forehand"], "cloud": ["backhand", "backhand2"],
+		# The high releases and the low step-out breaks have their own keyed clips (ULTIMATE-7: released at the
+		# solver's heights, from the 2026 final's close-ups); so has the fake.
+		"high_backhand": ["high_backhand"], "high_forehand": ["high_forehand"],
+		"low_backhand": ["low_backhand"], "low_forehand": ["low_forehand"], "fake": ["fake"],
+		"cloud": ["backhand", "backhand2"],
 		"blade": ["backhand", "backhand2"], "scoober": ["hammer"], "push": ["forehand"],
 		# The lefty forehand: the forehand mirrored (build_athletes.py mirror_poses), an off-hand flick.
 		"lefty_forehand": ["lefty_forehand"],

@@ -40,14 +40,20 @@ const HOPE := 6.0             # s of lateness a fully blended firefighter accept
 ## run for where it comes down, and her team-mates leave it to her: in the 2026 semifinal's footage the two sprint
 ## downfield all through a huck's flight (3.5-4.6 s for 35-45 m) and it comes down on them at the far end (caught,
 ## bid, laid out: 3 of 3 measured).
-const HUCK_URGE := 16.0         # a blended firefighter's pull towards the long throw (the AI's score, per unit blend)
+const HUCK_URGE := 16.0
+## Fakes (ULTIMATE-7; the 2026 final's close-ups of a marked handler): before a break she fakes, the disc whipped up
+## to a release on the other side and back (0.35-0.4 s each; two fakes in one close-up, a high fake after pivots in
+## the other), and the marker follows it; then she breaks, over the mark (high) or stepping out under it (low).
+const FAKE_TIME := 0.4         # s
+const FAKE_SHIFT := 0.5        # m: the marker's step after the fake         # a blended firefighter's pull towards the long throw (the AI's score, per unit blend)
 const CATCH_TOP := 2.7         # m: the highest catch, jumping
 const MARK_DIST := 1.6         # m: the marker stands this far from the thrower (disc space)
 const COUNT_RANGE := 3.0       # m: the marker counts only within this distance
 const DT := 1.0 / 120.0
 const WINDUP := {"backhand": 0.4, "forehand": 0.3, "hammer": 0.45, "pull": 0.6, "high_backhand": 0.45,
 		"high_forehand": 0.35, "cloud": 0.45, "blade": 0.4, "scoober": 0.4, "push": 0.25,
-		"lefty_forehand": 0.3}   # s from decision to release
+		"lefty_forehand": 0.3, "low_backhand": 0.4, "low_forehand": 0.4}   # s from decision to release (a low
+		# break: the drop and step out from the hold, 0.4 s in the 2026 final's close-up)
 ## The lefty forehand (PO 10-31: "right handed players also use lefty forehand, especially handlers"): a right-hander's
 ## off-hand flick, a quick break round the mark on the backhand side, released wide of the marker's reach. Short
 ## (an off-hand has less power), less accurate, but harder for the mark to get a hand to than a backhand break.
@@ -98,6 +104,10 @@ var thrower: PlayerState       # the last thrower (cannot catch their own throw)
 var receiver: PlayerState      # the intended receiver of the throw in the air
 var release: ThrowSolver.Release
 var stakes := 0.95             # how much the game means: a championship final (ULT_STAKES overrides)
+var faking := 0.0              # s left of the holder's fake
+var fake_side := 0.0           # +1: the fake goes to her right (the marker steps that way)
+var fakes := 0                 # fakes so far: the view plays the holder's fake clip on a new one
+var fakes_left := 0            # fakes she will make before a break, this possession
 var look_again := 0.0          # s until the thrower looks again (after a throw held back for a defender in its path)
 var last_block := {}
 var catch_vel := Vector3.ZERO  # the catcher's velocity at the last catch (tracing)
@@ -803,6 +813,8 @@ func _take(p: PlayerState) -> void:
 	stall_called = 0
 	hold_time = 0.0
 	look_again = 0.0
+	faking = 0.0
+	fakes_left = rng.randi_range(1, 2)
 	set_phase(Phase.HOLD)
 	for q: PlayerState in teams[offence]:
 		if q != p:
@@ -880,6 +892,9 @@ func _ai_throw() -> void:
 	var mgr := holder.inner.manager
 	var hurried := fire > 0.1
 	if hold_time < (0.3 if hurried else 1.0):
+		return
+	if faking > 0.0:
+		faking -= DT
 		return
 	if look_again > 0.0:
 		look_again -= DT
@@ -993,7 +1008,7 @@ func _ai_throw() -> void:
 	if best_kind == "cloud":
 		kind = "cloud"
 	elif best_kind == "high":
-		kind = "high_" + kind
+		kind = ("high_" if rng.randf() < 0.5 else "low_") + kind   # over the mark or under it (one each, close-ups)
 	elif best_kind == "lefty":
 		kind = "lefty_forehand"
 	var r := ThrowSolver.solve_auto(holder.pos, best_spot, kind)
@@ -1026,6 +1041,14 @@ func _ai_throw() -> void:
 	if not zone and not hurried and stall < 7.0 and not path_open(holder.pos, r, float(WINDUP.get(kind, 0.35))):
 		stats["lane_waits"] = stats.get("lane_waits", 0) + 1
 		look_again = LOOK_AGAIN
+		return
+	var marker := _marker()
+	if best_kind in ["high", "lefty"] and fakes_left > 0 and not hurried and stall < 7.0 \
+			and marker != null and marker.pos.distance_to(holder.pos) < COUNT_RANGE:
+		fakes_left -= 1
+		fakes += 1
+		faking = FAKE_TIME
+		fake_side = -signf(side) if side != 0.0 else 1.0     # the fake goes the other way from the break
 		return
 	if fire > 0.1 and best_spot.distance_to(holder.pos) >= 30.0:
 		say("#%d can't wait: the huck" % holder.number)
@@ -1081,6 +1104,8 @@ func _ai_goal(p: PlayerState, dt: float) -> void:
 			# Stand a disc space and a bit from the thrower, on the side that forces the forehand to one sideline.
 			var hp := holder.pos if holder != null else Vector3(disc.pos.x, 0, disc.pos.z)
 			p.goal = hp + Vector3(d * 0.6, 0, -1.4).normalized() * MARK_DIST
+			if faking > 0.0:
+				p.goal += Vector3(d, 0, 0).cross(Vector3.UP) * fake_side * FAKE_SHIFT   # she follows the fake
 		"guard", "chase":
 			_defend(p)
 		"zone":

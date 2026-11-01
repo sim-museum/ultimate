@@ -58,6 +58,8 @@ You play White.
   seconds.
 - **The AI:**
   - offence runs a vertical stack with cuts under and deep;
+  - a marked handler fakes before a break (the marker follows the fake), then breaks over the mark (a high release,
+    about 1.5 m) or steps out under it (a low release, about knee height), as in close-ups of a women's D-I final;
   - the thrower picks the receiver who wins the race to the disc, and holds a throw whose low early stretch a
     defender could cut off, until the count runs late (so hucks are rare: mostly a late-count hail mary);
   - defence is person to person, with a reaction lag, or a zone: a cup of three round the thrower, a middle,

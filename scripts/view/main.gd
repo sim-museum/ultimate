@@ -46,6 +46,7 @@ var bodies: Array = [[], []]       # Athlete per player
 var subs: Array = []               # Athlete per substitute
 var observers: Array = []          # [Athlete, PlayerState] per sideline: they walk level with the disc
 var windups_drawn := 0             # wind-ups (throws and pulls) the athletes have animated
+var fakes_drawn := 0               # the holder's fakes the athletes have animated
 var layouts_drawn := 0              # layouts the athletes have animated
 var catch_drawn := -1               # the throw (sim.stats.throws) whose catch clip has been started
 var tags: Array = [[], []]         # Label3D per player
@@ -418,6 +419,9 @@ func _update_players(delta: float) -> void:
 	if sim.windups != windups_drawn and sim.windup_by != null:
 		(bodies[sim.windup_by.team][sim.windup_by.idx] as Athlete).start_throw(sim.windup_kind, _release_in())
 	windups_drawn = sim.windups
+	if sim.fakes != fakes_drawn and sim.holder != null:
+		(bodies[sim.holder.team][sim.holder.idx] as Athlete).start_throw("fake", 0.18)   # from the clip's start
+	fakes_drawn = sim.fakes
 	# A layout: the sim decides it at the catch (or the block), so the dive starts just before its full stretch.
 	if sim.layouts != layouts_drawn and sim.layout_by != null:
 		(bodies[sim.layout_by.team][sim.layout_by.idx] as Athlete).dive_toward(sim.disc.pos, LAYOUT_LEAD)

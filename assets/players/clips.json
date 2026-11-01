@@ -529,6 +529,66 @@
    "release": 0.35,
    "source": "keyed (keyed_throws.py)"
   },
+  "high_forehand": {
+   "loop": false,
+   "length": 1.1,
+   "velocity": {
+    "w5": {
+     "right": 0.0,
+     "forward": 0.0
+    }
+   },
+   "release": 0.35,
+   "source": "keyed (keyed_throws.py)"
+  },
+  "high_backhand": {
+   "loop": false,
+   "length": 1.1666666666666667,
+   "velocity": {
+    "w5": {
+     "right": 0.0,
+     "forward": 0.0
+    }
+   },
+   "release": 0.45,
+   "source": "keyed (keyed_throws.py)"
+  },
+  "low_forehand": {
+   "loop": false,
+   "length": 1.2333333333333334,
+   "velocity": {
+    "w5": {
+     "right": 0.0,
+     "forward": 0.0
+    }
+   },
+   "release": 0.4,
+   "source": "keyed (keyed_throws.py)"
+  },
+  "low_backhand": {
+   "loop": false,
+   "length": 1.2333333333333334,
+   "velocity": {
+    "w5": {
+     "right": 0.0,
+     "forward": 0.0
+    }
+   },
+   "release": 0.4,
+   "source": "keyed (keyed_throws.py)"
+  },
+  "fake": {
+   "loop": false,
+   "length": 0.43333333333333335,
+   "velocity": {
+    "w5": {
+     "right": 0.0,
+     "forward": 0.0
+    }
+   },
+   "release": 0.18,
+   "source": "keyed (keyed_throws.py)"
+  },
   "mark": {
    "loop": false,
    "stance": true,
