@@ -48,6 +48,7 @@ const WINDUP := {"backhand": 0.4, "forehand": 0.3, "hammer": 0.45, "pull": 0.6, 
 ## off-hand flick, a quick break round the mark on the backhand side, released wide of the marker's reach. Short
 ## (an off-hand has less power), less accurate, but harder for the mark to get a hand to than a backhand break.
 const LEFTY_RANGE := 18.0      # m: the AI's longest lefty forehand
+const RUN_THROUGH := 2.0      # m: a receiver aims this far past the catch point (she runs through the catch)
 const ATTACK := 3.0           # m: a receiver comes this far towards the thrower during the wind-up
 const LEFTY_GAIN := 1.0       # m upfield: a lefty forehand is a break that gains ground, not a swing (ULTIMATE-7: the
                                # PO saw handlers' swings thrown as "flat lefty forehands"; a swing is a backhand or forehand)
@@ -95,6 +96,7 @@ var release: ThrowSolver.Release
 var stakes := 0.95             # how much the game means: a championship final (ULT_STAKES overrides)
 var look_again := 0.0          # s until the thrower looks again (after a throw held back for a defender in its path)
 var last_block := {}
+var catch_vel := Vector3.ZERO  # the catcher's velocity at the last catch (tracing)
 var last_miss := {}             # the last throw that came down uncaught, for tracing (tests/probe_blocks.gd)
 var recv_closest := 1e9         # the receiver's closest approach to the disc in flight, at a catchable height (m)
 var recv_closest_at := []      # [disc height, flight time, receiver's speed, disc's speed] there
@@ -634,6 +636,7 @@ func _caught(p: PlayerState) -> void:
 		_turnover(Field.restart_point(Vector3(disc.pos.x, 0, disc.pos.z)), "#%d drops it" % p.number, p)
 		return
 	stats.catches += 1
+	catch_vel = Vector3(p.vel.x, 0, p.vel.z)                 # for tracing (tests/probe_receivers.gd)
 	if not is_pull:
 		p.inner.touch()
 		if thrower != null:
@@ -1034,6 +1037,11 @@ func _ai_goal(p: PlayerState, dt: float) -> void:
 		"receive":
 			if phase in [Phase.FLIGHT, Phase.PULL] and release != null:
 				p.goal = _catch_spot(p, release)
+				# Run through the catch, not up to it (ULTIMATE-7: zone receivers pulled up at the spot): aim past it
+				# along her line of approach.
+				var through := Vector3(p.goal.x - p.pos.x, 0, p.goal.z - p.pos.z)
+				if through.length() > 0.2 and not is_pull:
+					p.goal += through.normalized() * RUN_THROUGH
 				p.sprint = true
 			elif phase == Phase.HOLD and holder != null:
 				# The wind-up: she comes to the disc (ULTIMATE-7; PO: a receiver "not running to the disk" is "rare in
