@@ -30,7 +30,9 @@ const THROW_CLIPS := {"backhand": ["backhand", "backhand2"], "pull": ["backhand"
 		"high_backhand": ["backhand", "backhand2"], "high_forehand": ["forehand"], "cloud": ["backhand", "backhand2"],
 		"blade": ["backhand", "backhand2"], "scoober": ["hammer"], "push": ["forehand"],
 		# The lefty forehand: the forehand mirrored (build_athletes.py mirror_poses), an off-hand flick.
-		"lefty_forehand": ["lefty_forehand"]}
+		"lefty_forehand": ["lefty_forehand"],
+		# The layout (a dive, whole body) plays on the same one-shot as the throws.
+		"layout": ["layout"]}
 
 static var _clips := {}
 static var _scenes := {}

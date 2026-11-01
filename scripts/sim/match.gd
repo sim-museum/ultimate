@@ -119,6 +119,8 @@ var pending_to: PlayerState
 var windup_left := 0.0
 var windup_kind := ""          # the kind of the last throw wound up (pull, backhand, forehand, hammer)
 var windup_by: PlayerState     # who wound it up
+var layouts := 0               # layouts so far (catches and blocks): the view starts the diver's clip on a new one
+var layout_by: PlayerState     # who laid out last
 var windups := 0               # throws (and pulls) wound up so far: the view starts the thrower's clip on a new one
 var events: Array = []         # [{t, text}], newest last
 var stats := {"throws": 0, "catches": 0, "turnovers": 0, "goals": 0, "pulls": 0, "stalls": 0, "blocks": 0}
@@ -572,12 +574,17 @@ func _fly(dt: float) -> void:
 			off_c = _layout(offence, LAYOUT_CHANCE)
 			if off_c != null:
 				say("Layout! #%d" % off_c.number)
+				layouts += 1
+				layout_by = off_c
 		if off_c == null and receiver != null and not is_pull and disc.pos.y < CATCH_TOP - 0.3 \
 				and Vector2(receiver.pos.x - disc.pos.x, receiver.pos.z - disc.pos.z).length() < BID_REACH \
 				and rng.randf() < BID_CHANCE:
 			off_c = receiver                     # a stretch for a pass flying by
 		if def_c == null and not is_pull and disc.vel.y < 0.0 and disc.pos.y < LAYOUT_TOP:
 			def_c = _layout(1 - offence, LAYOUT_CHANCE * 0.5)
+			if def_c != null and off_c == null:
+				layouts += 1
+				layout_by = def_c
 		if off_c != null:
 			_caught(off_c)
 			return

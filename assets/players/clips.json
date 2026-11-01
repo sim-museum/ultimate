@@ -517,6 +517,18 @@
    "release": 0.25,
    "source": "keyed (keyed_throws.py)"
   },
+  "layout": {
+   "loop": false,
+   "length": 1.5333333333333334,
+   "velocity": {
+    "w5": {
+     "right": 0.0,
+     "forward": 0.0
+    }
+   },
+   "release": 0.35,
+   "source": "keyed (keyed_throws.py)"
+  },
   "mark": {
    "loop": false,
    "stance": true,

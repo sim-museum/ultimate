@@ -28,6 +28,7 @@ const LIGHTS := {
 	"late": {"sun": [14.0, -150.0], "colour": Color(1.0, 0.8, 0.58), "energy": 1.45, "top": Color(0.3, 0.45, 0.72),
 		"horizon": Color(0.95, 0.78, 0.6), "ambient": 0.7},
 }
+const LAYOUT_LEAD := 0.1            # s: a layout is seen at its catch, so its clip starts this far before full stretch
 ## The observers (the college game's): orange shirts, black shorts, no numbers; one on each sideline.
 const OBSERVER_KIT := {"jersey": Color(1.0, 0.45, 0.08), "shorts": Color(0.06, 0.05, 0.06), "sleeves": Color(0.06, 0.05, 0.06),
 		"number": Color.BLACK, "outline": Color.BLACK}
@@ -45,6 +46,7 @@ var bodies: Array = [[], []]       # Athlete per player
 var subs: Array = []               # Athlete per substitute
 var observers: Array = []          # [Athlete, PlayerState] per sideline: they walk level with the disc
 var windups_drawn := 0             # wind-ups (throws and pulls) the athletes have animated
+var layouts_drawn := 0              # layouts the athletes have animated
 var catch_drawn := -1               # the throw (sim.stats.throws) whose catch clip has been started
 var tags: Array = [[], []]         # Label3D per player
 var rings: Array = [[], []]        # the ring under each player (holder, receiver, human)
@@ -416,6 +418,10 @@ func _update_players(delta: float) -> void:
 	if sim.windups != windups_drawn and sim.windup_by != null:
 		(bodies[sim.windup_by.team][sim.windup_by.idx] as Athlete).start_throw(sim.windup_kind, _release_in())
 	windups_drawn = sim.windups
+	# A layout: the sim decides it at the catch (or the block), so the dive starts just before its full stretch.
+	if sim.layouts != layouts_drawn and sim.layout_by != null:
+		(bodies[sim.layout_by.team][sim.layout_by.idx] as Athlete).start_throw("layout", LAYOUT_LEAD)
+	layouts_drawn = sim.layouts
 	# The receiver's catch: started as the disc comes within the clip's lead-in, once a throw.
 	var cl := Athlete.catch_lead(sim)
 	if cl >= 0.0 and catch_drawn != sim.stats.throws:
