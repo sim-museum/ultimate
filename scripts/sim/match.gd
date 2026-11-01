@@ -48,6 +48,9 @@ const WINDUP := {"backhand": 0.4, "forehand": 0.3, "hammer": 0.45, "pull": 0.6, 
 ## off-hand flick, a quick break round the mark on the backhand side, released wide of the marker's reach. Short
 ## (an off-hand has less power), less accurate, but harder for the mark to get a hand to than a backhand break.
 const LEFTY_RANGE := 18.0      # m: the AI's longest lefty forehand
+const ATTACK := 3.0           # m: a receiver comes this far towards the thrower during the wind-up
+const LEFTY_GAIN := 1.0       # m upfield: a lefty forehand is a break that gains ground, not a swing (ULTIMATE-7: the
+                               # PO saw handlers' swings thrown as "flat lefty forehands"; a swing is a backhand or forehand)
 const LEFTY_HAND := 0.5        # its share of the marker's chance of a hand on a break
 const LEFTY_ERROR := 1.4       # its aiming error over a right-handed throw's
 ## A long throw's lane (ULTIMATE-1 sprint 4): a huck stays low, at a height a defender can reach, for its first
@@ -831,6 +834,8 @@ func _hold(dt: float) -> void:
 func _start_throw(r: ThrowSolver.Release, to: PlayerState) -> void:
 	pending = r
 	pending_to = to
+	if to != null:
+		to.role = "receive"                        # she sees it coming and attacks it from the wind-up on
 	windup_kind = r.kind
 	windup_by = holder
 	windup_left = float(WINDUP.get(r.kind, 0.35))
@@ -904,7 +909,8 @@ func _ai_throw() -> void:
 				cup = false
 				t = w + 0.2 + dist / 5.5
 			elif breaking and holder.idx < HANDLERS and dist <= LEFTY_RANGE \
-					and (spot - holder.pos).dot(Vector3(d, 0, 0).cross(Vector3.UP)) < 0.0:
+					and (spot - holder.pos).dot(Vector3(d, 0, 0).cross(Vector3.UP)) < 0.0 \
+					and (spot.x - holder.pos.x) * d > LEFTY_GAIN:
 				cand_kind = "lefty"                            # a handler's break on the backhand side: the off hand
 			elif breaking:
 				cand_kind = "high"                             # a break goes over the mark
@@ -1028,6 +1034,12 @@ func _ai_goal(p: PlayerState, dt: float) -> void:
 		"receive":
 			if phase in [Phase.FLIGHT, Phase.PULL] and release != null:
 				p.goal = _catch_spot(p, release)
+				p.sprint = true
+			elif phase == Phase.HOLD and holder != null:
+				# The wind-up: she comes to the disc (ULTIMATE-7; PO: a receiver "not running to the disk" is "rare in
+				# games, unless there are absolutely no defenders around"): a few strides towards the thrower.
+				var to_thrower := Vector3(holder.pos.x - p.pos.x, 0, holder.pos.z - p.pos.z)
+				p.goal = p.pos + to_thrower.normalized() * minf(ATTACK, maxf(to_thrower.length() - 4.0, 0.0))
 				p.sprint = true
 		"fetch":
 			pass

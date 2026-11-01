@@ -9,7 +9,7 @@ extends RefCounted
 ## is a flat, low, driving throw, and a pull (with its run-up) about 29 m/s.
 const MAX_SPEED := 27.0
 const PULL_MAX_SPEED := 29.0
-const MAX_REACH := 44.0         # m: the longest throw at MAX_SPEED (measured: a huck reaches 44.7 m)
+const MAX_REACH := 40.0         # m: the longest huck shaped like a D1 huck on this disc model (ULTIMATE-7)
 const MIN_SPEED := 5.0
 const CATCH_HEIGHT := 1.3
 const SOLVE_DT := 1.0 / 60.0
@@ -46,9 +46,14 @@ const FLAT_LIKE := {"high_backhand": "backhand", "high_forehand": "forehand", "l
 ## of the row's and corrects the aim; with the angles fixed, a throw far off its speed dives or balloons.
 ## PROFILE (flat): of all releases up to 27 m/s, the one that gets there soonest at a catchable height (0.6-2.6 m),
 ## arriving no faster than 14 m/s, never more than 3 m off line or 3.5 m up.
+## From 25 m the rows are hucks shaped like a D1 huck (ULTIMATE-7, probe_calibrate.gd MODE=huck: no air bounce, never
+## back towards the thrower, the top before 75% of the flight, above 1 m for its first two thirds); the soonest-
+## arriving rows before them dipped to the turf and climbed again, and one drifted back (PO: "a beginner's mistake").
+## Nothing so shaped reaches 45 m on this disc model.
 const PROFILE := [[8.0, 17.0, 0.0, 3.0, 0.0], [12.0, 19.0, 0.0, 3.0, 0.0], [16.0, 20.0, 0.0, -2.0, -8.0],
-		[20.0, 21.0, 0.0, -6.0, 0.0], [25.0, 24.0, 0.0, -8.0, -16.0], [30.0, 27.0, 7.0, -16.0, -24.0],
-		[35.0, 27.0, 0.0, -10.0, -32.0], [40.0, 21.0, 2.0, -13.0, -24.0], [45.0, 22.0, 4.0, -16.0, -32.0]]
+		[20.0, 21.0, 0.0, -6.0, 0.0], [25.0, 20.0, 9.0, -16.0, -48.0], [27.5, 20.0, 9.0, -16.0, -48.0],
+		[30.0, 16.0, 5.0, -8.0, -8.0], [32.5, 17.0, 13.0, -16.0, -16.0], [35.0, 18.0, 11.0, -16.0, -16.0],
+		[37.5, 19.0, 11.0, -16.0, -24.0], [40.0, 20.0, 9.0, -16.0, -32.0]]
 ## PROFILE_IO: the same with the bank the other way (up to 6 m of curve). None reaches past 25 m: a fast disc banked
 ## that way turns over.
 const PROFILE_IO := [[8.0, 17.0, 0.0, 3.0, 4.0], [12.0, 18.0, 0.0, -2.0, 4.0], [16.0, 20.0, 0.0, 0.0, 4.0],
