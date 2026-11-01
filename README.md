@@ -63,12 +63,14 @@ You play White.
   - defence is person to person, with a reaction lag, or a zone: a cup of three round the thrower, a middle,
     two wings and a deep, sliding with the disc and closing on attackers in their area (Maroon plays zone);
   - against a zone the offence swings the disc along a line of handlers and looks for the holes;
-  - players chase the disc, and catch, block or lay out for it.
+  - players chase the disc, and catch, block or lay out for it; on a huck the receiver and her defender race
+    for where it comes down and the others leave it to her (as in the footage of a women's D-I semifinal).
 - **The players' inner worlds** (after the Internal Family Systems model): each player has her own Self-energy,
   nerves (an exile's fear of failing the team) and two protectors, a careful manager and a firefighter who cannot
   bear the tension. The game is a final: the pressure is highest in the opening points and at universe point,
   lowest mid-game. Nerves shake throws and loosen catches; a blended manager plays it safe; a blended firefighter
-  hurries and throws the huck nobody tried all game. A mistake stirs her nerves; a completed pass, a goal and the
+  hurries and puts up the huck: most often in the opening points, at a game point and at universe point (hucks
+  per point by stage, counted in a semifinal's footage: 1.5 in the opening four, 0.25 in the middle). A mistake stirs her nerves; a completed pass, a goal and the
   huddle between points settle them, and a calm team-mate close by helps her settle. It shows: stirred nerves raise the shoulders and quicken the breath, and after
   her own mistake a player's head drops for a moment.
 
